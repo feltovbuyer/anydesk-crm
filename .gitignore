@@ -1,0 +1,11 @@
+.vs/
+build/
+out/
+CMakeFiles/
+CMakeCache.txt
+*.user
+*.suo
+*.db
+*.db-shm
+*.db-wal
+uploads/

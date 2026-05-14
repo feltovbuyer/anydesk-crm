@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="ru">
+<head>
+    <meta charset="utf-8">
+    <title>AnyDesk Web</title>
+    <link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+    <div class="app">
+
+        <div class="topbar">
+            <div class="brand">AnyDesk Web</div>
+
+            <div class="nav">
+                <button class="nav-item active" data-page="leads-page">Лиды</button>
+                <button class="nav-item" data-page="broadcast-page">Рассылки</button>
+                <button class="nav-item" data-page="funnels-page">Воронки</button>
+                <button class="nav-item" data-page="autopush-page">Автопуши</button>
+                <button class="nav-item" data-page="admin-page">Админка</button>
+            </div>
+
+            <div class="top-user">
+                <div class="top-login">feltov</div>
+                <div class="top-role">admin</div>
+            </div>
+
+            <a class="logout" href="/logout">Выйти</a>
+        </div>
+
+        <section id="leads-page" class="page active">
+            <div class="layout">
+                <aside class="left">
+                    <div class="search">
+                        <div class="search-row">
+                            <input placeholder="Поиск по лидам...">
+                            <button class="filter-btn" id="open-filter">⌕</button>
+                        </div>
+                    </div>
+
+                    <div class="folders">
+                        <button class="folder active">Непрочитка <span>0</span></button>
+                        <button class="folder">РД <span>0</span></button>
+                        <button class="folder">ФД <span>0</span></button>
+                        <button class="folder">Все <span>0</span></button>
+                        <button class="folder bad">403 <span>0</span></button>
+                    </div>
+
+                    <div class="my-folders-head">
+                        <div class="my-folders-title">Мои папки</div>
+                        <button class="add-folder-btn" id="open-folder-modal">+ Добавить</button>
+                    </div>
+
+                    <div class="empty-list">
+                        <div class="empty-title">Лидов пока нет</div>
+                        <div class="empty-text">Добавь Telegram-бота в админке и напиши ему /start.</div>
+                    </div>
+                </aside>
+
+                <main class="chat">
+                    <div class="chat-empty">
+                        <div class="chat-empty-title">Чат пустой</div>
+                        <div class="chat-empty-text">Когда появится первый лид, здесь будет переписка.</div>
+                    </div>
+                </main>
+
+                <aside class="right">
+                    <div class="card">
+                        <div class="card-title">Карточка лида</div>
+                        <div class="empty-card">Выбери лида из списка</div>
+                    </div>
+                </aside>
+            </div>
+        </section>
+
+        <section id="broadcast-page" class="page">
+            <div class="single-page">
+                <h1>Рассылки</h1>
+                <p>Здесь позже будут рассылки.</p>
+            </div>
+        </section>
+
+        <section id="funnels-page" class="page">
+            <div class="single-page">
+                <h1>Воронки</h1>
+                <p>Здесь позже будут воронки.</p>
+            </div>
+        </section>
+
+        <section id="autopush-page" class="page">
+            <div class="single-page">
+                <h1>Автопуши</h1>
+                <p>Здесь позже будут автопуши.</p>
+            </div>
+        </section>
+
+        <section id="admin-page" class="page">
+            <div class="admin-layout">
+                <div class="admin-sidebar">
+                    <button class="admin-tab active" data-admin="bots-box">Боты</button>
+                    <button class="admin-tab" data-admin="staff-box">Сотрудники</button>
+                    <button class="admin-tab" data-admin="geo-box">GEO</button>
+                    <button class="admin-tab" data-admin="tags-box">Теги</button>
+                </div>
+
+                <div class="admin-content">
+                    <div id="bots-box" class="admin-box active">
+                        <div class="admin-head">
+                            <div>
+                                <h1>Боты</h1>
+                                <p>Добавляй Telegram-ботов прямо из CRM.</p>
+                            </div>
+
+                            <button class="primary-btn" id="open-bot-modal">+ Добавить бота</button>
+                        </div>
+
+                        <div id="bots-list" class="bots-list">
+                            <div class="table-empty">
+                                <div class="empty-title">Ботов пока нет</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="staff-box" class="admin-box">
+                        <h1>Сотрудники</h1>
+                        <p>Позже добавим менеджеров, роли и доступы.</p>
+                    </div>
+
+                    <div id="geo-box" class="admin-box">
+                        <h1>GEO</h1>
+                        <p>Позже добавим GEO и цвета тегов.</p>
+                    </div>
+
+                    <div id="tags-box" class="admin-box">
+                        <h1>Теги</h1>
+                        <p>Позже добавим кастомные теги.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <div class="filter-panel hidden" id="filter-panel">
+            <div class="filter-head">
+                <b>Фильтры</b>
+                <button id="close-filter">×</button>
+            </div>
+
+            <div class="filter-block">
+                <div class="filter-title">Дата 1 сообщения</div>
+
+                <label>От</label>
+                <input class="filter-input" type="date">
+
+                <label>До</label>
+                <input class="filter-input" type="date">
+            </div>
+
+            <div class="filter-block">
+                <div class="filter-title">Тег</div>
+                <select class="filter-input">
+                    <option value="">Любой тег</option>
+                    <option>Регистрация</option>
+                    <option>ФД</option>
+                    <option>РД</option>
+                    <option>VIP</option>
+                    <option>403</option>
+                    <option>Дожим</option>
+                </select>
+            </div>
+
+            <div class="filter-actions">
+                <button class="ghost-btn">Сбросить</button>
+                <button class="primary-btn">Применить</button>
+            </div>
+        </div>
+
+        <div class="folder-form hidden" id="folder-modal">
+            <div class="folder-form-card">
+                <div class="modal-head">
+                    <h2>Новая папка</h2>
+                    <button id="close-folder-modal">×</button>
+                </div>
+
+                <label>Название папки</label>
+                <input placeholder="Например: Дожим">
+
+                <label>Дата 1 сообщения от</label>
+                <input type="date">
+
+                <label>Дата 1 сообщения до</label>
+                <input type="date">
+
+                <label>Тег</label>
+                <select>
+                    <option value="">Любой тег</option>
+                    <option>Регистрация</option>
+                    <option>ФД</option>
+                    <option>РД</option>
+                    <option>VIP</option>
+                    <option>403</option>
+                    <option>Дожим</option>
+                </select>
+
+                <div class="folder-note">
+                    Папка будет видна только на твоём аккаунте.
+                </div>
+
+                <button class="primary-btn full">Сохранить папку</button>
+            </div>
+        </div>
+
+        <div class="bot-form hidden" id="bot-modal">
+            <div class="bot-form-card">
+                <div class="modal-head">
+                    <h2>Новый бот</h2>
+                    <button id="close-bot-modal">×</button>
+                </div>
+
+                <label>Название канала</label>
+                <input id="bot-name" name="name" placeholder="Например: Н1">
+
+                <label>Telegram Bot Token</label>
+                <input id="bot-token" name="token" placeholder="123456789:ABCDEF...">
+
+                <label>GEO</label>
+                <input id="bot-geo" name="geo" placeholder="Гана">
+
+                <label>Воронка</label>
+                <input id="bot-funnel" name="funnel" placeholder="ghana_main">
+
+                <button class="primary-btn full" id="save-bot-btn" type="button">Сохранить</button>
+            </div>
+        </div>
+
+    </div>
+
+    <script src="/js/app.js"></script>
+</body>
+</html>
