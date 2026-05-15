@@ -949,3 +949,10 @@ button {
 .hidden {
     display: none !important;
 }
+.chat-photo {
+    max-width: 180px;
+    max-height: 180px;
+    border-radius: 14px;
+    display: block;
+    cursor: pointer;
+}

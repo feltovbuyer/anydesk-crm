@@ -4,6 +4,7 @@
 #include "../services/TelegramService.h"
 #include "../db/Database.h"
 #include <filesystem>
+#include "../services/TelegramFileService.h"
 
 #include <drogon/drogon.h>
 
@@ -138,34 +139,35 @@ void LeadController::registerRoutes()
                 filename = "upload.bin";
             }
 
-            std::string savePath = "uploads/" + std::to_string(leadId) + "_" +
-                std::to_string(std::time(nullptr)) + "_" + filename;
+            auto content = file.fileContent();
+            std::string bytes(content.data(), content.size());
 
-            file.saveAs(savePath);
-
-            bool sent = TelegramService::sendFile(
+            auto sendResult = TelegramService::sendFileBytes(
                 token,
                 std::stoll(lead.tgUserId),
                 mediaType,
-                savePath,
+                file.getFileName(),
+                bytes,
                 caption
             );
 
-            if (!sent) {
+            if (!sendResult.ok) {
                 json["ok"] = false;
                 json["error"] = "telegram file send failed";
                 callback(drogon::HttpResponse::newHttpJsonResponse(json));
                 return;
             }
 
+            std::string mediaId = sendResult.fileId;
+
             std::string safeText = Database::escape(caption);
-            std::string safePath = Database::escape(savePath);
             std::string safeType = Database::escape(mediaType);
+            std::string safeMediaId = Database::escape(mediaId);
 
             Database::exec(
                 "INSERT INTO messages (lead_id, sender, text, media_type, media_id, is_read, created_at) "
                 "VALUES (" + std::to_string(leadId) + ", 'admin', '" + safeText + "', '" +
-                safeType + "', '" + safePath + "', 1, datetime('now'))"
+                safeType + "', '" + safeMediaId + "', 1, datetime('now'))"
             );
 
             LeadService::markRead(leadId);
@@ -174,6 +176,50 @@ void LeadController::registerRoutes()
             callback(drogon::HttpResponse::newHttpJsonResponse(json));
         },
         { drogon::Post }
+    );
+
+    drogon::app().registerHandler(
+        "/api/tg-file",
+        [](const drogon::HttpRequestPtr& req,
+            std::function<void(const drogon::HttpResponsePtr&)>&& callback)
+        {
+            std::string channel = req->getParameter("channel");
+            std::string fileId = req->getParameter("file_id");
+
+            Json::Value json;
+
+            if (channel.empty() || fileId.empty()) {
+                auto resp = drogon::HttpResponse::newHttpResponse();
+                resp->setStatusCode(drogon::k400BadRequest);
+                callback(resp);
+                return;
+            }
+
+            std::string token = BotService::tokenByChannel(channel);
+
+            if (token.empty()) {
+                auto resp = drogon::HttpResponse::newHttpResponse();
+                resp->setStatusCode(drogon::k404NotFound);
+                callback(resp);
+                return;
+            }
+
+            std::string bytes;
+            std::string contentType;
+
+            if (!TelegramFileService::loadFileBytes(token, fileId, bytes, contentType)) {
+                auto resp = drogon::HttpResponse::newHttpResponse();
+                resp->setStatusCode(drogon::k404NotFound);
+                callback(resp);
+                return;
+            }
+
+            auto resp = drogon::HttpResponse::newHttpResponse();
+            resp->setContentTypeString(contentType);
+            resp->setBody(std::move(bytes));
+            callback(resp);
+        },
+        { drogon::Get }
     );
 
     drogon::app().registerHandler(

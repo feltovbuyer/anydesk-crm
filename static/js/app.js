@@ -1,5 +1,7 @@
 let currentFolder = "unread";
 let currentLeadId = null;
+let selectedFile = null;
+let currentLeadChannel = "";
 
 document.addEventListener("DOMContentLoaded", () => {
     bindNavigation();
@@ -14,10 +16,9 @@ document.addEventListener("DOMContentLoaded", () => {
     setInterval(loadLeads, 2500);
     setInterval(() => {
     const replyText = document.getElementById("reply-text");
-
-    if (replyText && document.activeElement === replyText) {
-        return;
-    }
+if ((replyText && document.activeElement === replyText) || selectedFile) {
+    return;
+}
 
     if (currentLeadId) loadMessages(currentLeadId);
 }, 2500);
@@ -192,6 +193,7 @@ async function loadLeads() {
             item.classList.add("active");
 
             currentLeadId = item.dataset.id;
+            currentLeadChannel = lead.channel || "";
 
             const lead = JSON.parse(decodeURIComponent(item.dataset.lead));
             renderLeadCard(lead);
@@ -254,10 +256,15 @@ async function loadMessages(leadId) {
             ${messages.map(m => `
                 <div class="msg ${m.sender === "admin" ? "my-msg" : "user-msg"}">
                     <div class="bubble">
-                        ${m.media_type && m.media_type !== "text" ? `<div class="media-label">📎 ${safe(m.media_type)}</div>` : ""}
-                        ${safe(m.text)}    
-                        <div class="msg-time">${safe(m.created_at)}</div>
-                    </div>
+    ${m.media_type === "photo"
+        ? `<img class="chat-photo" src="/api/tg-file?channel=${encodeURIComponent(currentLeadChannel || "")}&file_id=${encodeURIComponent(m.media_id || "")}">`
+        : (m.media_type && m.media_type !== "text" ? `<div class="media-label">📎 ${safe(m.media_type)}</div>` : "")
+    }
+
+    ${safe(m.text)}
+
+    <div class="msg-time">${safe(m.created_at)}</div>
+</div>
                 </div>
             `).join("")}
         </div>
@@ -289,73 +296,84 @@ function bindSendReply() {
         if (!currentLeadId) return;
 
         const text = replyText.value.trim();
-        const file = fileInput?.files?.[0];
+        const file = selectedFile;
 
         if (!text && !file) return;
 
         sendBtn.disabled = true;
         sendBtn.textContent = "Отправка...";
 
-        let res;
+        try {
+            let res;
 
-        if (file) {
-    let mediaType = "document";
+            if (file) {
+                let mediaType = "document";
+                const name = (file.name || "").toLowerCase();
 
-    const name = (file.name || "").toLowerCase();
+                if (file.type.startsWith("image/")) {
+                    mediaType = "photo";
+                }
+                else if (file.type.startsWith("video/")) {
+                    mediaType = "video";
+                }
+                else if (name.endsWith(".ogg") || name.endsWith(".oga")) {
+                    mediaType = "voice";
+                }
 
-    if (file.type.startsWith("image/")) {
-        mediaType = "photo";
-    }
-    else if (file.type.startsWith("video/")) {
-        mediaType = "video";
-    }
-    else if (name.endsWith(".ogg") || name.endsWith(".oga")) {
-        mediaType = "voice";
-    }
-    else {
-        mediaType = "document";
-    }
+                const form = new FormData();
+                form.append("lead_id", currentLeadId);
+                form.append("media_type", mediaType);
+                form.append("caption", text);
+                form.append("file", file);
 
-    const form = new FormData();
-    form.append("lead_id", currentLeadId);
-    form.append("media_type", mediaType);
-    form.append("caption", text);
-    form.append("file", file);
+                res = await fetch("/api/messages/send-file", {
+                    method: "POST",
+                    body: form
+                });
+            }
+            else {
+                const body = new URLSearchParams();
+                body.append("lead_id", currentLeadId);
+                body.append("text", text);
 
-    res = await fetch("/api/messages/send-file", {
-        method: "POST",
-        body: form
-    });
-}
-else {
-    const body = new URLSearchParams();
-    body.append("lead_id", currentLeadId);
-    body.append("text", text);
+                res = await fetch("/api/messages/send", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                    body
+                });
+            }
 
-    res = await fetch("/api/messages/send", {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body
-    });
-}
+            const json = await res.json();
 
-        const json = await res.json();
+            if (!json.ok) {
+                alert("Не отправилось: " + (json.error || "unknown"));
+                return;
+            }
 
-        sendBtn.disabled = false;
-        sendBtn.textContent = "Отправить";
+            replyText.value = "";
+            selectedFile = null;
 
-        if (!json.ok) {
-            alert("Не отправилось: " + (json.error || "unknown"));
-            return;
+            if (fileInput) fileInput.value = "";
+
+            const attachedFile = document.getElementById("attached-file");
+            if (attachedFile) {
+                attachedFile.classList.add("hidden");
+                attachedFile.textContent = "";
+            }
+
+            await loadMessages(currentLeadId);
+            await loadLeads();
         }
-
-        replyText.value = "";
-        if (fileInput) fileInput.value = "";
-
-        await loadMessages(currentLeadId);
-        await loadLeads();
+        catch (e) {
+            alert("Ошибка отправки: " + e.message);
+        }
+        finally {
+            sendBtn.disabled = false;
+            sendBtn.textContent = "Отправить";
+        }
     };
 }
+
 
 function bindSendFile() {
     const attachBtn = document.getElementById("attach-btn");
@@ -369,8 +387,9 @@ function bindSendFile() {
     };
 
     fileInput.onchange = () => {
-        const file = fileInput.files?.[0];
-        if (!file) return;
+        selectedFile = fileInput.files?.[0];
+if (!selectedFile) return;
+const file = selectedFile;
 
         if (attachedFile) {
             attachedFile.classList.remove("hidden");

@@ -369,3 +369,120 @@ bool TelegramService::sendFile(
 
     return res == CURLE_OK && response.find("\"ok\":true") != std::string::npos;
 }
+TgSendFileResult TelegramService::sendFileBytes(
+    const std::string& botToken,
+    long long chatId,
+    const std::string& type,
+    const std::string& fileName,
+    const std::string& bytes,
+    const std::string& caption
+)
+{
+    TgSendFileResult result;
+
+    std::string method;
+    std::string field;
+
+    if (type == "photo") {
+        method = "sendPhoto";
+        field = "photo";
+    }
+    else if (type == "document") {
+        method = "sendDocument";
+        field = "document";
+    }
+    else if (type == "voice") {
+        method = "sendVoice";
+        field = "voice";
+    }
+    else if (type == "video") {
+        method = "sendVideo";
+        field = "video";
+    }
+    else if (type == "video_note") {
+        method = "sendVideoNote";
+        field = "video_note";
+    }
+    else {
+        return result;
+    }
+
+    CURL* curl = curl_easy_init();
+    if (!curl) return result;
+
+    std::string url = "https://api.telegram.org/bot" + botToken + "/" + method;
+
+    curl_mime* mime = curl_mime_init(curl);
+
+    auto part = curl_mime_addpart(mime);
+    curl_mime_name(part, "chat_id");
+    std::string chatIdStr = std::to_string(chatId);
+    curl_mime_data(part, chatIdStr.c_str(), CURL_ZERO_TERMINATED);
+
+    if (!caption.empty() && type != "video_note") {
+        part = curl_mime_addpart(mime);
+        curl_mime_name(part, "caption");
+        curl_mime_data(part, caption.c_str(), CURL_ZERO_TERMINATED);
+    }
+
+    part = curl_mime_addpart(mime);
+    curl_mime_name(part, field.c_str());
+    curl_mime_filename(part, fileName.c_str());
+    curl_mime_data(part, bytes.data(), bytes.size());
+
+    std::string response;
+
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_MIMEPOST, mime);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, curlWrite);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 120L);
+
+    CURLcode res = curl_easy_perform(curl);
+
+    curl_mime_free(mime);
+    curl_easy_cleanup(curl);
+
+    result.rawResponse = response;
+
+    std::cout << "[TG sendFileBytes] " << response << std::endl;
+
+    if (res != CURLE_OK) {
+        return result;
+    }
+
+    Json::Value root;
+    Json::CharReaderBuilder builder;
+    std::string errs;
+    std::istringstream ss(response);
+
+    if (!Json::parseFromStream(builder, ss, &root, &errs)) {
+        return result;
+    }
+
+    if (!root.get("ok", false).asBool()) {
+        return result;
+    }
+
+    result.ok = true;
+
+    const Json::Value& msg = root["result"];
+
+    if (type == "photo" && msg.isMember("photo") && msg["photo"].isArray() && !msg["photo"].empty()) {
+        result.fileId = msg["photo"][msg["photo"].size() - 1]["file_id"].asString();
+    }
+    else if (type == "document" && msg.isMember("document")) {
+        result.fileId = msg["document"]["file_id"].asString();
+    }
+    else if (type == "voice" && msg.isMember("voice")) {
+        result.fileId = msg["voice"]["file_id"].asString();
+    }
+    else if (type == "video" && msg.isMember("video")) {
+        result.fileId = msg["video"]["file_id"].asString();
+    }
+    else if (type == "video_note" && msg.isMember("video_note")) {
+        result.fileId = msg["video_note"]["file_id"].asString();
+    }
+
+    return result;
+}

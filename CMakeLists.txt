@@ -22,6 +22,7 @@ add_executable(anydesk_web
 
     services/TelegramService.cc
     services/LeadService.cc
+    services/TelegramFileService.cc
 
     db/Database.cc
 )

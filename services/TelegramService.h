@@ -13,6 +13,11 @@ struct TgBotConfig {
     std::string channel;
     std::string geo;
 };
+struct TgSendFileResult {
+    bool ok = false;
+    std::string fileId;
+    std::string rawResponse;
+};
 
 class TelegramService {
 public:
@@ -30,6 +35,15 @@ public:
         long long chatId,
         const std::string& type,
         const std::string& filePath,
+        const std::string& caption = ""
+    );
+
+    static TgSendFileResult sendFileBytes(
+        const std::string& botToken,
+        long long chatId,
+        const std::string& type,
+        const std::string& fileName,
+        const std::string& bytes,
         const std::string& caption = ""
     );
 
