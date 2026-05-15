@@ -956,3 +956,44 @@ button {
     display: block;
     cursor: pointer;
 }
+.photo-viewer {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.75);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+}
+
+    .photo-viewer.active {
+        display: flex;
+    }
+
+    .photo-viewer img {
+        max-width: 90vw;
+        max-height: 90vh;
+        border-radius: 18px;
+    }
+.media-download {
+    display: inline-block;
+    padding: 10px 14px;
+    background: rgba(255,255,255,.08);
+    border-radius: 12px;
+    color: white;
+    text-decoration: none;
+    margin-bottom: 8px;
+    cursor: pointer;
+}
+
+    .media-download:hover {
+        background: rgba(255,255,255,.14);
+    }
+.chat-photo {
+    width: 180px;
+    height: 180px;
+    object-fit: cover;
+    border-radius: 14px;
+    display: block;
+    cursor: pointer;
+}

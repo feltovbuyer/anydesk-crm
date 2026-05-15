@@ -30,6 +30,27 @@ static std::string urlEncode(const std::string& value)
     return result;
 }
 
+static std::string normalizeStartPayload(std::string s)
+{
+    for (char& c : s) {
+        if (c == '.') c = '_';
+    }
+    return s;
+}
+
+static std::string extractStartArg(const std::string& text)
+{
+    if (text.rfind("/start ", 0) == 0) {
+        return normalizeStartPayload(text.substr(7));
+    }
+
+    if (text.rfind("/start", 0) == 0 && text.size() > 6) {
+        return normalizeStartPayload(text.substr(6));
+    }
+
+    return "";
+}
+
 void TelegramService::startAll()
 {
     if (running.exchange(true)) {
@@ -208,22 +229,58 @@ void TelegramService::handleUpdate(const TgBotConfig& bot, const Json::Value& up
 
     std::string text = msg.get("text", "").asString();
 
-    if (text.empty()) {
+    std::string mediaType = "text";
+    std::string mediaId;
+
+    if (msg.isMember("photo") && msg["photo"].isArray() && !msg["photo"].empty()) {
+        mediaType = "photo";
+        mediaId = msg["photo"][msg["photo"].size() - 1]["file_id"].asString();
+        text = msg.get("caption", "").asString();
+    }
+    else if (msg.isMember("voice")) {
+        mediaType = "voice";
+        mediaId = msg["voice"]["file_id"].asString();
+        text = msg.get("caption", "").asString();
+    }
+    else if (msg.isMember("document")) {
+        mediaType = "document";
+        mediaId = msg["document"]["file_id"].asString();
+        text = msg.get("caption", "").asString();
+    }
+    else if (msg.isMember("video")) {
+        mediaType = "video";
+        mediaId = msg["video"]["file_id"].asString();
+        text = msg.get("caption", "").asString();
+    }
+    else if (msg.isMember("video_note")) {
+        mediaType = "video_note";
+        mediaId = msg["video_note"]["file_id"].asString();
+        text = "";
+    }
+
+    if (mediaType == "text" && text.empty()) {
         return;
     }
 
     std::string subid;
 
-    if (text.rfind("/start", 0) == 0) {
-        if (text.size() > 7) {
-            subid = text.substr(7);
+    if (mediaType == "text" && text.rfind("/start", 0) == 0) {
+        subid = extractStartArg(text);
+
+        if (!subid.empty()) {
+            text = "/start " + subid;
         }
 
         saveIncomingMessage(bot, tgUserId, username, fullName, text, subid);
         return;
     }
 
-    saveIncomingMessage(bot, tgUserId, username, fullName, text, "");
+    if (mediaType == "text") {
+        saveIncomingMessage(bot, tgUserId, username, fullName, text, "");
+        return;
+    }
+
+    saveIncomingMedia(bot, tgUserId, username, fullName, text, mediaType, mediaId);
 }
 
 void TelegramService::saveIncomingMessage(
@@ -270,6 +327,54 @@ void TelegramService::saveIncomingMessage(
     Database::exec(
         "INSERT INTO messages (lead_id, sender, text, media_type, media_id, created_at, is_read) "
         "VALUES (" + leadId + ", 'user', '" + safeText + "', 'text', '', datetime('now'), 0)"
+    );
+}
+void TelegramService::saveIncomingMedia(
+    const TgBotConfig& bot,
+    long long tgUserId,
+    const std::string& username,
+    const std::string& fullName,
+    const std::string& text,
+    const std::string& mediaType,
+    const std::string& mediaId
+)
+{
+    std::string safeUsername = Database::escape(username);
+    std::string safeFullName = Database::escape(fullName);
+    std::string safeText = Database::escape(text);
+    std::string safeChannel = Database::escape(bot.channel);
+    std::string safeGeo = Database::escape(bot.geo);
+    std::string safeType = Database::escape(mediaType);
+    std::string safeMediaId = Database::escape(mediaId);
+
+    Database::exec(
+        "INSERT INTO leads (tg_user_id, username, full_name, channel, geo, created_at, last_message_at) "
+        "VALUES ('" + std::to_string(tgUserId) + "', '" + safeUsername + "', '" + safeFullName + "', '" +
+        safeChannel + "', '" + safeGeo + "', datetime('now'), datetime('now')) "
+        "ON CONFLICT(tg_user_id) DO UPDATE SET "
+        "username=excluded.username, "
+        "full_name=excluded.full_name, "
+        "channel=excluded.channel, "
+        "geo=excluded.geo, "
+        "last_message_at=datetime('now')"
+    );
+
+    auto rows = Database::query(
+        "SELECT id FROM leads "
+        "WHERE tg_user_id = '" + std::to_string(tgUserId) + "' "
+        "LIMIT 1"
+    );
+
+    if (rows.empty()) {
+        return;
+    }
+
+    std::string leadId = rows[0].at("id");
+
+    Database::exec(
+        "INSERT INTO messages (lead_id, sender, text, media_type, media_id, created_at, is_read) "
+        "VALUES (" + leadId + ", 'user', '" + safeText + "', '" +
+        safeType + "', '" + safeMediaId + "', datetime('now'), 0)"
     );
 }
 

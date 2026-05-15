@@ -69,6 +69,15 @@ private:
         const std::string& text,
         const std::string& subid
     );
+    static void saveIncomingMedia(
+        const TgBotConfig& bot,
+        long long tgUserId,
+        const std::string& username,
+        const std::string& fullName,
+        const std::string& text,
+        const std::string& mediaType,
+        const std::string& mediaId
+    );
 
 private:
     static inline std::atomic_bool running{ false };

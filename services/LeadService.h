@@ -26,6 +26,8 @@ struct MessageItem
     std::string sender;
     std::string text;
     std::string createdAt;
+    std::string mediaType;
+    std::string mediaId;
 };
 
 struct FolderCounts

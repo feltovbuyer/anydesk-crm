@@ -311,6 +311,8 @@ void LeadController::registerRoutes()
                 item["lead_id"] = m.leadId;
                 item["sender"] = m.sender;
                 item["text"] = m.text;
+                item["media_type"] = m.mediaType;
+                item["media_id"] = m.mediaId;
                 item["created_at"] = m.createdAt;
                 arr.append(item);
             }

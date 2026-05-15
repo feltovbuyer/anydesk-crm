@@ -2,6 +2,10 @@ let currentFolder = "unread";
 let currentLeadId = null;
 let selectedFile = null;
 let currentLeadChannel = "";
+let lastOpenedLeadId = null;
+let currentMessages = [];
+let lastMessageId = 0;
+
 
 document.addEventListener("DOMContentLoaded", () => {
     bindNavigation();
@@ -15,12 +19,14 @@ document.addEventListener("DOMContentLoaded", () => {
 
     setInterval(loadLeads, 2500);
     setInterval(() => {
-    const replyText = document.getElementById("reply-text");
-if ((replyText && document.activeElement === replyText) || selectedFile) {
-    return;
-}
+    if (!currentLeadId) return;
 
-    if (currentLeadId) loadMessages(currentLeadId);
+    const replyText = document.getElementById("reply-text");
+    if ((replyText && document.activeElement === replyText) || selectedFile) {
+        return;
+    }
+
+    refreshMessagesAppend();
 }, 2500);
 });
 
@@ -188,19 +194,20 @@ async function loadLeads() {
     `;
 
     document.querySelectorAll(".lead-item").forEach(item => {
-        item.addEventListener("click", () => {
-            document.querySelectorAll(".lead-item").forEach(x => x.classList.remove("active"));
-            item.classList.add("active");
+    item.addEventListener("click", () => {
+        document.querySelectorAll(".lead-item").forEach(x => x.classList.remove("active"));
+        item.classList.add("active");
 
-            currentLeadId = item.dataset.id;
-            currentLeadChannel = lead.channel || "";
+        currentLeadId = item.dataset.id;
 
-            const lead = JSON.parse(decodeURIComponent(item.dataset.lead));
-            renderLeadCard(lead);
-            loadMessages(currentLeadId);
-                loadFolderCounts();
-        });
+        const lead = JSON.parse(decodeURIComponent(item.dataset.lead));
+        currentLeadChannel = lead.channel || "";
+
+        renderLeadCard(lead);
+        loadMessages(currentLeadId);
+        loadFolderCounts();
     });
+});
 }
 
 function leadHtml(lead) {
@@ -243,46 +250,105 @@ async function loadMessages(leadId) {
     if (!chat) return;
 
     const messages = json.messages || [];
+    currentMessages = messages;
+    lastMessageId = messages.length ? Number(messages[messages.length - 1].id) : 0;
+    const msgBoxOld = document.querySelector(".messages");
+
+const shouldScrollBottom =
+    String(leadId) !== String(lastOpenedLeadId) ||
+    (msgBoxOld &&
+     (msgBoxOld.scrollHeight - msgBoxOld.scrollTop - msgBoxOld.clientHeight < 120));
+    lastOpenedLeadId = leadId;
 
     chat.innerHTML = `
-        <div class="chat-head">
-            <div>
-                <div class="chat-title">Лид #${leadId}</div>
-                <div class="chat-sub">Сообщения из Telegram</div>
+    <div class="chat-head">
+        <div>
+            <div class="chat-title">Лид #${leadId}</div>
+            <div class="chat-sub">Сообщения из Telegram</div>
+        </div>
+    </div>
+
+    <div class="messages">
+        ${messages.map(m => messageHtml(m)).join("")}
+    </div>
+
+    <div class="composer">
+        <button id="attach-btn" class="attach-btn" type="button">📎</button>
+        <input id="file-input" type="file" hidden>
+        <div id="attached-file" class="attached-file hidden"></div>
+        <textarea id="reply-text" placeholder="Написать сообщение..."></textarea>
+        <button id="send-reply-btn" type="button">Отправить</button>
+    </div>
+`;
+
+    const msgBox = document.querySelector(".messages");
+
+setTimeout(() => {
+    if (msgBox) msgBox.scrollTop = msgBox.scrollHeight;
+}, 300);
+
+bindSendReply();
+bindSendFile();
+}
+
+const imgs = document.querySelectorAll(".chat-photo");
+
+
+async function refreshMessagesAppend() {
+    if (!currentLeadId) return;
+
+    const msgBox = document.querySelector(".messages");
+    if (!msgBox) return;
+
+    const wasNearBottom =
+        msgBox.scrollHeight - msgBox.scrollTop - msgBox.clientHeight < 160;
+
+    const res = await fetch(`/api/messages?lead_id=${encodeURIComponent(currentLeadId)}`);
+    const json = await res.json();
+
+    if (!json.ok) return;
+
+    const messages = json.messages || [];
+    const fresh = messages.filter(m => Number(m.id) > Number(lastMessageId));
+
+    if (fresh.length === 0) return;
+
+    fresh.forEach(m => {
+        msgBox.insertAdjacentHTML("beforeend", messageHtml(m));
+        lastMessageId = Math.max(lastMessageId, Number(m.id));
+    });
+
+    currentMessages = messages;
+
+    if (wasNearBottom) {
+        setTimeout(() => {
+            msgBox.scrollTop = msgBox.scrollHeight;
+        }, 100);
+    }
+}
+
+function messageHtml(m) {
+    return `
+        <div class="msg ${m.sender === "admin" ? "my-msg" : "user-msg"}">
+            <div class="bubble">
+                ${m.media_type === "photo"
+                    ? `<img class="chat-photo"
+                          src="/api/tg-file?channel=${encodeURIComponent(currentLeadChannel || "")}&file_id=${encodeURIComponent(m.media_id || "")}">`
+                    : (m.media_type && m.media_type !== "text"
+                        ? `<a class="media-download"
+                             href="/api/tg-file?channel=${encodeURIComponent(currentLeadChannel || "")}&file_id=${encodeURIComponent(m.media_id || "")}"
+                             download>
+                             📎 ${safe(m.media_type)}
+                           </a>`
+                        : "")
+                }
+
+                ${safe(m.text)}
+
+                <div class="msg-time">${safe(m.created_at)}</div>
             </div>
         </div>
-
-        <div class="messages">
-            ${messages.map(m => `
-                <div class="msg ${m.sender === "admin" ? "my-msg" : "user-msg"}">
-                    <div class="bubble">
-    ${m.media_type === "photo"
-        ? `<img class="chat-photo" src="/api/tg-file?channel=${encodeURIComponent(currentLeadChannel || "")}&file_id=${encodeURIComponent(m.media_id || "")}">`
-        : (m.media_type && m.media_type !== "text" ? `<div class="media-label">📎 ${safe(m.media_type)}</div>` : "")
-    }
-
-    ${safe(m.text)}
-
-    <div class="msg-time">${safe(m.created_at)}</div>
-</div>
-                </div>
-            `).join("")}
-        </div>
-
-        <div class="composer">
-    <button id="attach-btn" class="attach-btn" type="button">📎</button>
-    <input id="file-input" type="file" hidden>
-    <div id="attached-file" class="attached-file hidden"></div>
-    <textarea id="reply-text" placeholder="Написать сообщение..."></textarea>
-    <button id="send-reply-btn" type="button">Отправить</button>
-</div>
     `;
-
-    const msgBox = chat.querySelector(".messages");
-    if (msgBox) msgBox.scrollTop = msgBox.scrollHeight;
-
-    bindSendReply();
-    bindSendFile();
 }
 
 function bindSendReply() {
@@ -350,6 +416,11 @@ function bindSendReply() {
                 return;
             }
 
+            const msgBox = document.querySelector(".messages");
+            if (msgBox) {
+                msgBox.scrollTop = msgBox.scrollHeight;
+            }
+
             replyText.value = "";
             selectedFile = null;
 
@@ -361,7 +432,7 @@ function bindSendReply() {
                 attachedFile.textContent = "";
             }
 
-            await loadMessages(currentLeadId);
+            await refreshMessagesAppend();
             await loadLeads();
         }
         catch (e) {
@@ -454,3 +525,24 @@ async function loadFolderCounts() {
     if (folders[3]) folders[3].querySelector("span").textContent = json.all ?? 0;
     if (folders[4]) folders[4].querySelector("span").textContent = json.bad403 ?? 0;
 }
+document.addEventListener("click", (e) => {
+    const img = e.target.closest(".chat-photo");
+    if (!img) return;
+
+    let modal = document.getElementById("photo-viewer");
+
+    if (!modal) {
+        modal = document.createElement("div");
+        modal.id = "photo-viewer";
+        modal.className = "photo-viewer";
+        modal.innerHTML = `<img id="photo-viewer-img">`;
+        document.body.appendChild(modal);
+
+        modal.addEventListener("click", () => {
+            modal.classList.remove("active");
+        });
+    }
+
+    document.getElementById("photo-viewer-img").src = img.src;
+    modal.classList.add("active");
+});

@@ -143,7 +143,7 @@ std::vector<LeadItem> LeadService::all(const std::string& folder)
 std::vector<MessageItem> LeadService::messages(int leadId)
 {
     auto rows = Database::query(
-        "SELECT id, lead_id, sender, text, created_at "
+        "SELECT id, lead_id, sender, text, media_type, media_id, created_at "
         "FROM messages "
         "WHERE lead_id=" + std::to_string(leadId) + " "
         "ORDER BY id ASC;"
@@ -157,6 +157,8 @@ std::vector<MessageItem> LeadService::messages(int leadId)
         m.leadId = std::stoi(r["lead_id"]);
         m.sender = r["sender"];
         m.text = r["text"];
+        m.mediaType = r["media_type"];
+        m.mediaId = r["media_id"];
         m.createdAt = r["created_at"];
         messages.push_back(m);
     }
