@@ -8,6 +8,9 @@
 #include <chrono>
 #include <iostream>
 #include <sstream>
+#include <random>
+#include "AssignmentService.h"
+#include "DuplicateLeadService.h"
 
 static size_t curlWrite(void* contents, size_t size, size_t nmemb, std::string* out)
 {
@@ -49,6 +52,71 @@ static std::string extractStartArg(const std::string& text)
     }
 
     return "";
+}
+struct PickedManager {
+    std::string login;
+    std::string tag;
+};
+
+static PickedManager pickFdManager()
+{
+    auto rows = Database::query(
+        "SELECT staff_login, manager_tag, percent "
+        "FROM staff_distribution "
+        "WHERE active=1 "
+        "AND percent > 0 "
+        "AND work_type IN ('fd', 'fd_rd')"
+    );
+
+    int total = 0;
+    for (const auto& r : rows) {
+        total += std::stoi(r.at("percent"));
+    }
+
+    if (rows.empty() || total <= 0) {
+        return {};
+    }
+
+    static std::mt19937 rng(std::random_device{}());
+    std::uniform_int_distribution<int> dist(1, total);
+
+    int roll = dist(rng);
+    int acc = 0;
+
+    for (const auto& r : rows) {
+        acc += std::stoi(r.at("percent"));
+
+        if (roll <= acc) {
+            return {
+                r.at("staff_login"),
+                r.at("manager_tag")
+            };
+        }
+    }
+
+    return {
+        rows[0].at("staff_login"),
+        rows[0].at("manager_tag")
+    };
+}
+
+static bool tagExists(const std::string& tags, const std::string& tag)
+{
+    if (tag.empty()) return true;
+
+    std::string needle = "," + tag + ",";
+    std::string haystack = "," + tags + ",";
+
+    return haystack.find(needle) != std::string::npos;
+}
+
+static std::string appendTag(const std::string& tags, const std::string& tag)
+{
+    if (tag.empty()) return tags;
+    if (tagExists(tags, tag)) return tags;
+
+    if (tags.empty()) return tag;
+    return tags + "," + tag;
 }
 
 void TelegramService::startAll()
@@ -292,23 +360,50 @@ void TelegramService::saveIncomingMessage(
     const std::string& subid
 )
 {
+    auto existingLead = Database::query(
+        "SELECT id, assigned_staff, tags "
+        "FROM leads "
+        "WHERE tg_user_id = '" + std::to_string(tgUserId) + "' "
+        "AND channel = '" + Database::escape(bot.channel) + "' "
+        "LIMIT 1"
+    );
+
+    bool isNewLead = existingLead.empty();
+
+    PickedManager picked;
+
+    std::string assignedStaff;
+    std::string finalTags;
+
+    if (isNewLead) {
+        picked = pickFdManager();
+        assignedStaff = picked.login;
+        finalTags = picked.tag;
+    }
+    else {
+        assignedStaff = existingLead[0].at("assigned_staff");
+        finalTags = existingLead[0].at("tags");
+    }
     std::string safeUsername = Database::escape(username);
     std::string safeFullName = Database::escape(fullName);
     std::string safeText = Database::escape(text);
     std::string safeSubid = Database::escape(subid);
+    std::string safeAssignedStaff = Database::escape(assignedStaff);
+    std::string safeFinalTags = Database::escape(finalTags);
     std::string safeChannel = Database::escape(bot.channel);
     std::string safeGeo = Database::escape(bot.geo);
 
     Database::exec(
-        "INSERT INTO leads (tg_user_id, username, full_name, channel, geo, subid, created_at, last_message_at) "
+        "INSERT INTO leads (tg_user_id, username, full_name, channel, geo, subid, tags, assigned_staff, created_at, last_message_at) "
         "VALUES ('" + std::to_string(tgUserId) + "', '" + safeUsername + "', '" + safeFullName + "', '" +
-        safeChannel + "', '" + safeGeo + "', '" + safeSubid + "', datetime('now'), datetime('now')) "
-        "ON CONFLICT(tg_user_id) DO UPDATE SET "
+        safeChannel + "', '" + safeGeo + "', '" + safeSubid + "', '" + safeFinalTags + "', '" + safeAssignedStaff + "', datetime('now'), datetime('now')) "
+        "ON CONFLICT(tg_user_id, channel) DO UPDATE SET "
         "username=excluded.username, "
         "full_name=excluded.full_name, "
-        "channel=excluded.channel, "
         "geo=excluded.geo, "
         "subid=CASE WHEN excluded.subid != '' THEN excluded.subid ELSE leads.subid END, "
+        "assigned_staff=CASE WHEN leads.assigned_staff = '' THEN excluded.assigned_staff ELSE leads.assigned_staff END, "
+        "tags=CASE WHEN leads.tags = '' THEN excluded.tags ELSE leads.tags END, "
         "last_message_at=datetime('now')"
     );
 
@@ -323,6 +418,14 @@ void TelegramService::saveIncomingMessage(
     }
 
     std::string leadId = rows[0].at("id");
+    int leadIdInt = std::stoi(leadId);
+
+    int rootId = DuplicateLeadService::findRootLeadForUser(tgUserId);
+    if (rootId > 0 && rootId != leadIdInt) {
+        DuplicateLeadService::markAsDuplicate(leadIdInt, rootId);
+    }
+
+    AssignmentService::reassignIfInactiveManager(leadIdInt);
 
     Database::exec(
         "INSERT INTO messages (lead_id, sender, text, media_type, media_id, created_at, is_read) "
@@ -339,6 +442,28 @@ void TelegramService::saveIncomingMedia(
     const std::string& mediaId
 )
 {
+    auto existingLead = Database::query(
+        "SELECT id, assigned_staff, tags FROM leads "
+        "WHERE tg_user_id = '" + std::to_string(tgUserId) + "' "
+        "LIMIT 1"
+    );
+
+    bool isNewLead = existingLead.empty();
+
+    PickedManager picked;
+
+    std::string assignedStaff;
+    std::string finalTags;
+
+    if (isNewLead) {
+        picked = pickFdManager();
+        assignedStaff = picked.login;
+        finalTags = picked.tag;
+    }
+    else {
+        assignedStaff = existingLead[0].at("assigned_staff");
+        finalTags = existingLead[0].at("tags");
+    }
     std::string safeUsername = Database::escape(username);
     std::string safeFullName = Database::escape(fullName);
     std::string safeText = Database::escape(text);
@@ -346,16 +471,19 @@ void TelegramService::saveIncomingMedia(
     std::string safeGeo = Database::escape(bot.geo);
     std::string safeType = Database::escape(mediaType);
     std::string safeMediaId = Database::escape(mediaId);
+    std::string safeAssignedStaff = Database::escape(assignedStaff);
+    std::string safeFinalTags = Database::escape(finalTags);
 
     Database::exec(
-        "INSERT INTO leads (tg_user_id, username, full_name, channel, geo, created_at, last_message_at) "
+        "INSERT INTO leads (tg_user_id, username, full_name, channel, geo, tags, assigned_staff, created_at, last_message_at) "
         "VALUES ('" + std::to_string(tgUserId) + "', '" + safeUsername + "', '" + safeFullName + "', '" +
-        safeChannel + "', '" + safeGeo + "', datetime('now'), datetime('now')) "
-        "ON CONFLICT(tg_user_id) DO UPDATE SET "
+        safeChannel + "', '" + safeGeo + "', '" + safeFinalTags + "', '" + safeAssignedStaff + "', datetime('now'), datetime('now')) "
+        "ON CONFLICT(tg_user_id, channel) DO UPDATE SET "
         "username=excluded.username, "
         "full_name=excluded.full_name, "
-        "channel=excluded.channel, "
         "geo=excluded.geo, "
+        "assigned_staff=CASE WHEN leads.assigned_staff = '' THEN excluded.assigned_staff ELSE leads.assigned_staff END, "
+        "tags=CASE WHEN leads.tags = '' THEN excluded.tags ELSE leads.tags END, "
         "last_message_at=datetime('now')"
     );
 
@@ -370,6 +498,14 @@ void TelegramService::saveIncomingMedia(
     }
 
     std::string leadId = rows[0].at("id");
+    int leadIdInt = std::stoi(leadId);
+
+    int rootId = DuplicateLeadService::findRootLeadForUser(tgUserId);
+    if (rootId > 0 && rootId != leadIdInt) {
+        DuplicateLeadService::markAsDuplicate(leadIdInt, rootId);
+    }
+
+    AssignmentService::reassignIfInactiveManager(leadIdInt);
 
     Database::exec(
         "INSERT INTO messages (lead_id, sender, text, media_type, media_id, created_at, is_read) "

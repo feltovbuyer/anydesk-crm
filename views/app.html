@@ -122,19 +122,79 @@
 
                     <div id="staff-box" class="admin-box">
                         <h1>Сотрудники</h1>
-                        <p>Позже добавим менеджеров, роли и доступы.</p>
-                    </div>
+                        <div class="staff-head">
+                            <div>
+                                <p>Менеджеры, теги, тип обработки и распределение лидов</p>
+                            </div>
 
-                    <div id="geo-box" class="admin-box">
-                        <h1>GEO</h1>
-                        <p>Позже добавим GEO и цвета тегов.</p>
-                    </div>
+                            <button id="open-staff-modal" class="staff-primary-btn">
+                                + Новый сотрудник
+                            </button>
+                        </div>
 
-                    <div id="tags-box" class="admin-box">
-                        <h1>Теги</h1>
-                        <p>Позже добавим кастомные теги.</p>
+                        <div id="staff-list" class="staff-grid">
+                            <div class="staff-empty">Сотрудников пока нет</div>
+                        </div>
+
+                        <div id="staff-modal" class="staff-modal hidden">
+                            <div class="staff-modal-backdrop"></div>
+
+                            <div class="staff-modal-card">
+                                <div class="staff-modal-head">
+                                    <div>
+                                        <h3>Новый сотрудник</h3>
+                                        <p>Добавь менеджера и процент выдачи лидов</p>
+                                    </div>
+                                    <button id="close-staff-modal" class="staff-close-btn">×</button>
+                                </div>
+
+                                <div class="staff-form">
+                                    <label>
+                                        <span>Менеджер</span>
+                                        <input id="staff-login" placeholder="Например: Вова">
+                                    </label>
+
+                                    <label>
+                                        <span>Тег</span>
+                                        <input id="staff-tag" placeholder="Например: Вова">
+                                    </label>
+
+                                    <label>
+                                        <span>Тип обработки</span>
+                                        <select id="staff-work-type">
+                                            <option value="fd">ФД</option>
+                                            <option value="rd">РД</option>
+                                            <option value="fd_rd">ФД + РД</option>
+                                        </select>
+                                    </label>
+
+                                    <label>
+                                        <span>Пароль</span>
+                                        <input id="staff-password" placeholder="Пароль">
+                                    </label>
+
+                                    <label>
+                                        <span>Процент</span>
+                                        <input id="staff-percent" placeholder="100" type="number" min="0" max="100">
+                                    </label>
+                                </div>
+
+                                <button id="save-staff-btn" class="staff-save-btn">
+                                    Сохранить сотрудника
+                                </button>
+                            </div>
+                        </div>
+
+                        <div id="geo-box" class="admin-box">
+                            <h1>GEO</h1>
+                            <p>Позже добавим GEO и цвета тегов.</p>
+                        </div>
+
+                        <div id="tags-box" class="admin-box">
+                            <h1>Теги</h1>
+                            <p>Позже добавим кастомные теги.</p>
+                        </div>
                     </div>
-                </div>
             </div>
         </section>
 

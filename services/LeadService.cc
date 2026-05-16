@@ -88,23 +88,31 @@ void LeadService::addMessage(
     }
 }
 
-std::vector<LeadItem> LeadService::all(const std::string& folder)
+std::vector<LeadItem> LeadService::all(
+    const std::string& folder,
+    const std::string& role,
+    const std::string& login
+)
 {
     std::string where = "1=1";
 
+    if (role == "manager") {
+        where += " AND assigned_staff='" + esc2(login) + "' ";
+        where += "AND EXISTS (SELECT 1 FROM staff s WHERE s.login='" + esc2(login) + "' AND s.active=1) ";
+    }
+
     if (folder == "unread") {
-        where =
-            "EXISTS (SELECT 1 FROM messages m "
+        where += " AND EXISTS (SELECT 1 FROM messages m "
             "WHERE m.lead_id=leads.id AND m.sender='user' AND m.is_read=0)";
     }
     else if (folder == "fd") {
-        where = "tags LIKE '%ФД%'";
+        where += " AND tags LIKE '%ФД%'";
     }
     else if (folder == "rd") {
-        where = "tags LIKE '%РД%'";
+        where += " AND tags LIKE '%РД%'";
     }
     else if (folder == "403") {
-        where = "is_403=1 OR tags LIKE '%403%'";
+        where += " AND (is_403=1 OR tags LIKE '%403%')";
     }
 
     auto rows = Database::query(
@@ -207,34 +215,50 @@ static int countSql(const std::string& sql)
     return rows[0]["cnt"].empty() ? 0 : std::stoi(rows[0]["cnt"]);
 }
 
-FolderCounts LeadService::counts()
+FolderCounts LeadService::counts(
+    const std::string& role,
+    const std::string& login
+)
 {
+    std::string managerFilter = "";
+
+    if (role == "manager") {
+        managerFilter =
+            " AND assigned_staff='" + esc2(login) + "' "
+            "AND EXISTS (SELECT 1 FROM staff s WHERE s.login='" + esc2(login) + "' AND s.active=1) ";
+    }
+
     FolderCounts c{};
 
     c.unread = countSql(
         "SELECT COUNT(*) AS cnt FROM leads "
         "WHERE EXISTS (SELECT 1 FROM messages m "
-        "WHERE m.lead_id=leads.id AND m.sender='user' AND m.is_read=0);"
+        "WHERE m.lead_id=leads.id AND m.sender='user' AND m.is_read=0)"
+        + managerFilter + ";"
     );
 
     c.rd = countSql(
         "SELECT COUNT(*) AS cnt FROM leads "
-        "WHERE tags LIKE '%РД%' AND is_403=0;"
+        "WHERE tags LIKE '%РД%' AND is_403=0"
+        + managerFilter + ";"
     );
 
     c.fd = countSql(
         "SELECT COUNT(*) AS cnt FROM leads "
-        "WHERE tags LIKE '%ФД%' AND is_403=0;"
+        "WHERE tags LIKE '%ФД%' AND is_403=0"
+        + managerFilter + ";"
     );
 
     c.all = countSql(
         "SELECT COUNT(*) AS cnt FROM leads "
-        "WHERE is_403=0;"
+        "WHERE is_403=0"
+        + managerFilter + ";"
     );
 
     c.bad403 = countSql(
         "SELECT COUNT(*) AS cnt FROM leads "
-        "WHERE is_403=1 OR tags LIKE '%403%';"
+        "WHERE (is_403=1 OR tags LIKE '%403%')"
+        + managerFilter + ";"
     );
 
     return c;

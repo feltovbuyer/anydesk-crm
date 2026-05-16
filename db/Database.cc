@@ -26,6 +26,18 @@ bool Database::init(const std::string& path)
     )SQL");
 
     exec(R"SQL(
+        CREATE TABLE IF NOT EXISTS staff_distribution (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            staff_login TEXT UNIQUE NOT NULL,
+            manager_tag TEXT NOT NULL,
+            work_type TEXT NOT NULL DEFAULT 'fd_rd',
+            percent INTEGER NOT NULL DEFAULT 0,
+            active INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        );
+    )SQL");
+
+    exec(R"SQL(
         INSERT OR IGNORE INTO staff (login, password, role, active)
         VALUES ('feltov', '812', 'admin', 1);
     )SQL");
@@ -79,6 +91,52 @@ bool Database::init(const std::string& path)
             last_message_at TEXT DEFAULT CURRENT_TIMESTAMP
         );
     )SQL");
+
+    auto leadCols = query("PRAGMA table_info(leads)");
+    bool hasAssignedStaff = false;
+
+    for (const auto& c : leadCols) {
+        if (c.at("name") == "assigned_staff") {
+            hasAssignedStaff = true;
+            break;
+        }
+    }
+
+    if (!hasAssignedStaff) {
+        exec("ALTER TABLE leads ADD COLUMN assigned_staff TEXT DEFAULT '';");
+    }
+
+    auto leadColsDup = query("PRAGMA table_info(leads)");
+
+    bool hasIsDuplicate = false;
+    bool hasDuplicateOf = false;
+    bool hasAutomationEnabled = false;
+    bool hasMainChannel = false;
+
+    for (const auto& c : leadColsDup) {
+        std::string name = c.at("name");
+
+        if (name == "is_duplicate") hasIsDuplicate = true;
+        if (name == "duplicate_of") hasDuplicateOf = true;
+        if (name == "automation_enabled") hasAutomationEnabled = true;
+        if (name == "main_channel") hasMainChannel = true;
+    }
+
+    if (!hasIsDuplicate) {
+        exec("ALTER TABLE leads ADD COLUMN is_duplicate INTEGER DEFAULT 0;");
+    }
+
+    if (!hasDuplicateOf) {
+        exec("ALTER TABLE leads ADD COLUMN duplicate_of INTEGER DEFAULT 0;");
+    }
+
+    if (!hasAutomationEnabled) {
+        exec("ALTER TABLE leads ADD COLUMN automation_enabled INTEGER DEFAULT 1;");
+    }
+
+    if (!hasMainChannel) {
+        exec("ALTER TABLE leads ADD COLUMN main_channel TEXT DEFAULT '';");
+    }
 
     exec(R"SQL(
         CREATE TABLE IF NOT EXISTS messages (

@@ -59,11 +59,18 @@ public:
         const std::string& text
     );
 
-    static std::vector<LeadItem> all(const std::string& folder);
+    static std::vector<LeadItem> all(
+        const std::string& folder,
+        const std::string& role = "admin",
+        const std::string& login = ""
+    );
     static std::vector<MessageItem> messages(int leadId);
 
     static LeadItem findById(int leadId);
     static void markRead(int leadId);
 
-    static FolderCounts counts();
+    static FolderCounts counts(
+        const std::string& role = "admin",
+        const std::string& login = ""
+    );
 };

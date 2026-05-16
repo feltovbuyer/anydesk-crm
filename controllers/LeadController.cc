@@ -16,7 +16,23 @@ void LeadController::registerRoutes()
             std::function<void(const drogon::HttpResponsePtr&)>&& callback)
         {
             std::string folder = req->getParameter("folder");
-            auto leads = LeadService::all(folder);
+
+            std::string role = "admin";
+            std::string login = "";
+
+            auto session = req->session();
+            if (session) {
+                try {
+                    role = session->get<std::string>("role");
+                    login = session->get<std::string>("login");
+                }
+                catch (...) {
+                    role = "admin";
+                    login = "";
+                }
+            }
+
+            auto leads = LeadService::all(folder, role, login);
 
             Json::Value arr(Json::arrayValue);
 
@@ -52,7 +68,22 @@ void LeadController::registerRoutes()
         [](const drogon::HttpRequestPtr& req,
             std::function<void(const drogon::HttpResponsePtr&)>&& callback)
         {
-            auto c = LeadService::counts();
+            std::string role = "admin";
+            std::string login = "";
+
+            auto session = req->session();
+            if (session) {
+                try {
+                    role = session->get<std::string>("role");
+                    login = session->get<std::string>("login");
+                }
+                catch (...) {
+                    role = "admin";
+                    login = "";
+                }
+            }
+
+            auto c = LeadService::counts(role, login);
 
             Json::Value json;
             json["ok"] = true;
@@ -65,6 +96,38 @@ void LeadController::registerRoutes()
             callback(drogon::HttpResponse::newHttpJsonResponse(json));
         },
         { drogon::Get }
+    );
+
+    drogon::app().registerHandler(
+        "/api/lead/mark-unread",
+        [](const drogon::HttpRequestPtr& req, std::function<void(const drogon::HttpResponsePtr&)>&& callback) {
+            Json::Value json;
+
+            int leadId = 0;
+            try {
+                leadId = std::stoi(req->getParameter("lead_id"));
+            }
+            catch (...) {
+                leadId = 0;
+            }
+
+            if (leadId <= 0) {
+                json["ok"] = false;
+                json["error"] = "lead_id required";
+                callback(drogon::HttpResponse::newHttpJsonResponse(json));
+                return;
+            }
+
+            Database::exec(
+                "UPDATE messages SET is_read=0 "
+                "WHERE lead_id=" + std::to_string(leadId) + " "
+                "AND sender='user'"
+            );
+
+            json["ok"] = true;
+            callback(drogon::HttpResponse::newHttpJsonResponse(json));
+        },
+        { drogon::Post }
     );
 
     drogon::app().registerHandler(

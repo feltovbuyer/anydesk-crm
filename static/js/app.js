@@ -1,5 +1,7 @@
 let currentFolder = "unread";
+let currentLeadData = null;
 let currentLeadId = null;
+let chatRequestSeq = 0;
 let selectedFile = null;
 let currentLeadChannel = "";
 let lastOpenedLeadId = null;
@@ -13,6 +15,7 @@ document.addEventListener("DOMContentLoaded", () => {
     bindAdminTabs();
     bindModals();
     bindSaveBot();
+    bindSaveStaff();
 
     loadBots();
     loadLeads();
@@ -72,6 +75,7 @@ function bindAdminTabs() {
             if (box) box.classList.add("active");
 
             if (btn.dataset.admin === "bots-box") loadBots();
+            if (btn.dataset.admin === "staff-box") loadStaff();
         });
     });
 }
@@ -201,11 +205,12 @@ async function loadLeads() {
         currentLeadId = item.dataset.id;
 
         const lead = JSON.parse(decodeURIComponent(item.dataset.lead));
+        currentLeadData = lead;
         currentLeadChannel = lead.channel || "";
-
         renderLeadCard(lead);
-        loadMessages(currentLeadId);
-        loadFolderCounts();
+        if (currentLeadId) {
+    loadMessages(currentLeadId);
+    }
     });
 });
 }
@@ -241,58 +246,79 @@ function leadHtml(lead) {
 }
 
 async function loadMessages(leadId) {
-    const res = await fetch(`/api/messages?lead_id=${encodeURIComponent(leadId)}`);
-    const json = await res.json();
-
-    if (!json.ok) return;
+    const requestSeq = ++chatRequestSeq;
+    currentLeadId = leadId;
 
     const chat = document.querySelector(".chat");
     if (!chat) return;
 
+    const msgBoxOld = document.querySelector(".messages");
+
+    const shouldScrollBottom =
+        String(leadId) !== String(lastOpenedLeadId) ||
+        (
+            msgBoxOld &&
+            msgBoxOld.scrollHeight - msgBoxOld.scrollTop - msgBoxOld.clientHeight < 120
+        );
+
+    lastOpenedLeadId = leadId;
+
+    const res = await fetch(`/api/messages?lead_id=${encodeURIComponent(leadId)}`);
+    const json = await res.json();
+
+    if (requestSeq !== chatRequestSeq || String(currentLeadId) !== String(leadId)) {
+        return;
+    }
+
+    if (!json.ok) return;
+
     const messages = json.messages || [];
     currentMessages = messages;
     lastMessageId = messages.length ? Number(messages[messages.length - 1].id) : 0;
-    const msgBoxOld = document.querySelector(".messages");
 
-const shouldScrollBottom =
-    String(leadId) !== String(lastOpenedLeadId) ||
-    (msgBoxOld &&
-     (msgBoxOld.scrollHeight - msgBoxOld.scrollTop - msgBoxOld.clientHeight < 120));
-    lastOpenedLeadId = leadId;
+    const leadName = currentLeadData?.full_name || currentLeadData?.username || "Без имени";
+    const leadTgId = currentLeadData?.tg_user_id || "";
 
     chat.innerHTML = `
-    <div class="chat-head">
-        <div>
-            <div class="chat-title">Лид #${leadId}</div>
-            <div class="chat-sub">Сообщения из Telegram</div>
+        <div class="chat-head">
+            <div>
+                <div class="chat-lead-name">${safe(leadName)}</div>
+                <div class="chat-lead-id">id ${safe(leadTgId)}</div>
+            </div>
+
+            <div class="chat-actions">
+                <button class="chat-icon-btn" id="macro-btn" title="Макросы">⚡</button>
+                <button class="chat-icon-btn" id="transfer-btn" title="Передать чат">↪</button>
+                <button class="chat-icon-btn" id="unread-btn" title="Поставить непрочитку">●</button>
+            </div>
         </div>
-    </div>
 
-    <div class="messages">
-        ${messages.map(m => messageHtml(m)).join("")}
-    </div>
+        <div class="messages">
+            ${messages.map(m => messageHtml(m)).join("")}
+        </div>
 
-    <div class="composer">
-        <button id="attach-btn" class="attach-btn" type="button">📎</button>
-        <input id="file-input" type="file" hidden>
-        <div id="attached-file" class="attached-file hidden"></div>
-        <textarea id="reply-text" placeholder="Написать сообщение..."></textarea>
-        <button id="send-reply-btn" type="button">Отправить</button>
-    </div>
-`;
+        <div class="reply-box">
+            <button id="attach-btn">📎</button>
+            <input id="reply-text" type="text" placeholder="Сообщение...">
+            <button id="send-reply-btn">Отправить</button>
+            <input id="file-input" type="file" hidden>
+        </div>
+
+        <div id="attached-file" class="hidden"></div>
+    `;
 
     const msgBox = document.querySelector(".messages");
 
-setTimeout(() => {
-    if (msgBox) msgBox.scrollTop = msgBox.scrollHeight;
-}, 300);
+    if (shouldScrollBottom) {
+        setTimeout(() => {
+            if (msgBox) msgBox.scrollTop = msgBox.scrollHeight;
+        }, 80);
+    }
 
-bindSendReply();
-bindSendFile();
+    bindSendReply();
+    bindSendFile();
+    bindChatActions();
 }
-
-const imgs = document.querySelectorAll(".chat-photo");
-
 
 async function refreshMessagesAppend() {
     if (!currentLeadId) return;
@@ -328,24 +354,36 @@ async function refreshMessagesAppend() {
 }
 
 function messageHtml(m) {
+    const fileUrl =
+        `/api/tg-file?channel=${encodeURIComponent(currentLeadChannel || "")}` +
+        `&file_id=${encodeURIComponent(m.media_id || "")}`;
+
+    let mediaHtml = "";
+
+    if (m.media_type === "photo") {
+    mediaHtml = `
+        <img class="chat-photo"
+             loading="lazy"
+             decoding="async"
+             src="${fileUrl}">
+        `;
+    }
+    else if (m.media_type && m.media_type !== "text") {
+        mediaHtml = `
+            <a class="media-download"
+               href="${safe(fileUrl)}"
+               download>
+               📎 ${safe(m.media_type)}
+            </a>
+        `;
+    }
+
     return `
         <div class="msg ${m.sender === "admin" ? "my-msg" : "user-msg"}">
             <div class="bubble">
-                ${m.media_type === "photo"
-                    ? `<img class="chat-photo"
-                          src="/api/tg-file?channel=${encodeURIComponent(currentLeadChannel || "")}&file_id=${encodeURIComponent(m.media_id || "")}">`
-                    : (m.media_type && m.media_type !== "text"
-                        ? `<a class="media-download"
-                             href="/api/tg-file?channel=${encodeURIComponent(currentLeadChannel || "")}&file_id=${encodeURIComponent(m.media_id || "")}"
-                             download>
-                             📎 ${safe(m.media_type)}
-                           </a>`
-                        : "")
-                }
-
-                ${safe(m.text)}
-
-                <div class="msg-time">${safe(m.created_at)}</div>
+                ${mediaHtml}
+                ${safe(m.text || "")}
+                <div class="msg-time">${safe(m.created_at || "")}</div>
             </div>
         </div>
     `;
@@ -511,20 +549,6 @@ function safe(value) {
         .replaceAll(">", "&gt;")
         .replaceAll('"', "&quot;");
 }
-async function loadFolderCounts() {
-    const res = await fetch("/api/folder-counts");
-    const json = await res.json();
-
-    if (!json.ok) return;
-
-    const folders = document.querySelectorAll(".folder");
-
-    if (folders[0]) folders[0].querySelector("span").textContent = json.unread ?? 0;
-    if (folders[1]) folders[1].querySelector("span").textContent = json.rd ?? 0;
-    if (folders[2]) folders[2].querySelector("span").textContent = json.fd ?? 0;
-    if (folders[3]) folders[3].querySelector("span").textContent = json.all ?? 0;
-    if (folders[4]) folders[4].querySelector("span").textContent = json.bad403 ?? 0;
-}
 document.addEventListener("click", (e) => {
     const img = e.target.closest(".chat-photo");
     if (!img) return;
@@ -546,3 +570,223 @@ document.addEventListener("click", (e) => {
     document.getElementById("photo-viewer-img").src = img.src;
     modal.classList.add("active");
 });
+function bindSaveStaff() {
+    const openBtn = document.getElementById("open-staff-modal");
+    const closeBtn = document.getElementById("close-staff-modal");
+    const modal = document.getElementById("staff-modal");
+    const saveBtn = document.getElementById("save-staff-btn");
+
+    if (openBtn && modal) {
+        openBtn.addEventListener("click", () => {
+            modal.classList.remove("hidden");
+        });
+    }
+
+    if (closeBtn && modal) {
+        closeBtn.addEventListener("click", () => {
+            modal.classList.add("hidden");
+        });
+    }
+
+    if (modal) {
+        modal.addEventListener("click", (e) => {
+            if (e.target.classList.contains("staff-modal-backdrop")) {
+                modal.classList.add("hidden");
+            }
+        });
+    }
+
+    if (!saveBtn) return;
+
+    saveBtn.addEventListener("click", async () => {
+        const body = new URLSearchParams();
+        body.append("login", document.getElementById("staff-login").value);
+        body.append("manager_tag", document.getElementById("staff-tag").value);
+        body.append("work_type", document.getElementById("staff-work-type").value);
+        body.append("password", document.getElementById("staff-password").value);
+        body.append("percent", document.getElementById("staff-percent").value);
+
+        const res = await fetch("/api/staff/save", {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body
+        });
+
+        const json = await res.json();
+
+        if (!json.ok) {
+            alert("Ошибка сохранения сотрудника: " + (json.error || "unknown"));
+            return;
+        }
+
+        document.getElementById("staff-login").value = "";
+        document.getElementById("staff-tag").value = "";
+        document.getElementById("staff-password").value = "";
+        document.getElementById("staff-percent").value = "";
+
+        if (modal) modal.classList.add("hidden");
+
+        await loadStaff();
+    });
+}
+
+async function loadStaff() {
+    const box = document.getElementById("staff-list");
+    if (!box) return;
+
+    const res = await fetch("/api/staff");
+    const json = await res.json();
+
+    if (!json.ok || !json.staff || json.staff.length === 0) {
+        box.innerHTML = `<div class="staff-empty">Сотрудников пока нет</div>`;
+        return;
+    }
+
+    box.innerHTML = json.staff.map(s => `
+        <div class="staff-card ${s.active === "0" ? "inactive" : ""}">
+            <div class="staff-card-top">
+                <div class="staff-avatar">
+                    ${safe(s.login || "?").slice(0, 1).toUpperCase()}
+                </div>
+
+                <div class="staff-main">
+                    <div class="staff-name">${safe(s.login)}</div>
+                    <div class="staff-sub">Тег: ${safe(s.manager_tag)}</div>
+                </div>
+
+                <div class="staff-type ${s.work_type}">
+                    ${workTypeLabel(s.work_type)}
+                </div>
+            </div>
+
+            <div class="staff-meta">
+                <div>
+                    <span>Пароль</span>
+                    <b>${safe(s.password)}</b>
+                </div>
+
+                <div>
+                    <span>Распределение</span>
+                    <b>${safe(s.percent)}%</b>
+                </div>
+            </div>
+
+            <div class="staff-progress">
+                <div style="width:${Number(s.percent || 0)}%"></div>
+            </div>
+
+            <div class="staff-actions">
+    <button class="staff-edit-btn"
+        onclick="editStaff('${safe(s.login)}','${safe(s.manager_tag)}','${safe(s.work_type)}','${safe(s.password)}','${safe(s.percent)}')">
+        Редактировать
+    </button>
+
+    <button onclick="toggleStaff('${safe(s.login)}')" class="${s.active === "0" ? "staff-enable-btn" : "staff-disable-btn"}">
+        ${s.active === "0" ? "Включить" : "Выключить"}
+    </button>
+</div>
+        </div>
+    `).join("");
+}
+
+function workTypeLabel(type) {
+    if (type === "fd") return "ФД";
+    if (type === "rd") return "РД";
+    return "ФД+РД";
+}
+
+async function toggleStaff(login) {
+    const body = new URLSearchParams();
+    body.append("login", login);
+
+    await fetch("/api/staff/toggle", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body
+    });
+
+    await loadStaff();
+}
+function bindChatActions() {
+    const macroBtn = document.getElementById("macro-btn");
+    const transferBtn = document.getElementById("transfer-btn");
+    const unreadBtn = document.getElementById("unread-btn");
+
+    if (macroBtn) {
+        macroBtn.onclick = () => {
+            alert("Макросы:\n\nРетен Парагвай\nРетен Нигерия");
+        };
+    }
+
+    if (transferBtn) {
+        transferBtn.onclick = () => {
+            alert("Передача чата: следующим патчем сделаем список менеджеров + поиск.");
+        };
+    }
+
+    if (unreadBtn) {
+        unreadBtn.onclick = async () => {
+            if (!currentLeadId) return;
+
+            const body = new URLSearchParams();
+            body.append("lead_id", currentLeadId);
+
+            const res = await fetch("/api/lead/mark-unread", {
+                method: "POST",
+                headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                body
+            });
+
+            const json = await res.json();
+
+            if (!json.ok) {
+                alert("Не смог поставить непрочитку");
+                return;
+            }
+
+            await loadFolderCounts();
+            await loadLeads();
+        };
+    }
+}
+function lazyLoadChatPhotos() {
+    const photos = Array.from(document.querySelectorAll(".photo-lazy[data-src]"));
+
+    photos.forEach((box, i) => {
+        setTimeout(() => {
+            const src = box.dataset.src;
+
+            const img = new Image();
+            img.loading = "lazy";
+            img.decoding = "async";
+            img.className = "chat-photo";
+
+            img.onload = () => {
+                box.innerHTML = "";
+                box.appendChild(img);
+                box.classList.add("loaded");
+
+                box.onclick = () => {
+                    window.open(src, "_blank");
+                };
+            };
+
+            img.onerror = () => {
+                box.innerHTML = `<div class="photo-skeleton">Ошибка загрузки фото</div>`;
+            };
+
+            img.src = src;
+        }, i * 80);
+    });
+}
+function editStaff(login, tag, workType, password, percent) {
+    const modal = document.getElementById("staff-modal");
+
+    document.getElementById("staff-login").value = login;
+    document.getElementById("staff-tag").value = tag;
+    document.getElementById("staff-work-type").value = workType || "fd_rd";
+    document.getElementById("staff-password").value = password;
+    document.getElementById("staff-percent").value = percent;
+
+    if (modal) modal.classList.remove("hidden");
+}

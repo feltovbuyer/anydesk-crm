@@ -4,6 +4,7 @@
 #include "db/Database.h"
 #include "controllers/BotController.h"
 #include "services/TelegramService.h"
+#include "controllers/StaffController.h"
 #include "controllers/LeadController.h"
 
 #include <thread>
@@ -20,6 +21,7 @@ int main()
 
     PageController::registerRoutes();
     BotController::registerRoutes();
+    StaffController::registerRoutes();
     LeadController::registerRoutes();
 
     std::thread tgStarter([]() {
