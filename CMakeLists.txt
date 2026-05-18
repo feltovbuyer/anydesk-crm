@@ -30,6 +30,8 @@ add_executable(anydesk_web
     services/LeadTagService.cc
     services/FunnelService.cc
     controllers/TagController.cc
+    controllers/BroadcastController.cc
+    services/BroadcastService.cc
 
     db/Database.cc
 )

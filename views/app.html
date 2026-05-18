@@ -74,8 +74,148 @@
 
         <section id="broadcast-page" class="page">
             <div class="single-page">
-                <h1>Рассылки</h1>
-                <p>Здесь позже будут рассылки.</p>
+                <link rel="stylesheet" href="/css/broadcasts.css">
+
+                <section class="broadcast-page">
+                    <div class="broadcast-head">
+                        <div>
+                            <h1>Рассылки</h1>
+                            <p>Собери аудиторию по тегам, датам и запусти отправку через нужные Telegram-боты</p>
+                        </div>
+
+                        <div class="broadcast-status-pill">
+                            <span class="dot"></span>
+                            Готово к настройке
+                        </div>
+                    </div>
+
+                    <div class="broadcast-grid">
+                        <div class="broadcast-main">
+                            <div class="broadcast-card">
+                                <div class="card-title">
+                                    <div>
+                                        <h2>Аудитория</h2>
+                                        <p>INCLUDE — обязательные теги, EXCLUDE — исключения</p>
+                                    </div>
+                                </div>
+
+                                <div class="tag-filter-box include-box">
+                                    <div class="filter-top">
+                                        <div>
+                                            <h3>INCLUDE теги</h3>
+                                            <p>Лид должен иметь все выбранные теги</p>
+                                        </div>
+                                        <button class="mini-btn" id="broadcast-open-include">+ Добавить</button>
+                                    </div>
+                                    <div class="broadcast-chip-list" id="broadcast-include-tags">
+                                        <span class="empty-chip">Теги не выбраны</span>
+                                    </div>
+                                </div>
+
+                                <div class="tag-filter-box exclude-box">
+                                    <div class="filter-top">
+                                        <div>
+                                            <h3>EXCLUDE теги</h3>
+                                            <p>Если у лида есть любой из этих тегов — он не попадёт</p>
+                                        </div>
+                                        <button class="mini-btn danger" id="broadcast-open-exclude">+ Исключить</button>
+                                    </div>
+                                    <div class="broadcast-chip-list" id="broadcast-exclude-tags">
+                                        <span class="empty-chip">Исключений нет</span>
+                                    </div>
+                                </div>
+
+                                <div class="date-filter-box">
+                                    <h3>Период лидов</h3>
+                                    <p>Фильтр по дате создания / первого сообщения</p>
+
+                                    <div class="date-row">
+                                        <label>
+                                            От
+                                            <input type="date" id="broadcast-date-from">
+                                        </label>
+
+                                        <label>
+                                            До
+                                            <input type="date" id="broadcast-date-to">
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="broadcast-card">
+                                <div class="card-title">
+                                    <div>
+                                        <h2>Сообщение</h2>
+                                        <p>Текст и вложение для рассылки</p>
+                                    </div>
+                                </div>
+
+                                <textarea id="broadcast-text" class="broadcast-textarea" placeholder="Напиши текст рассылки..."></textarea>
+
+                                <div class="attach-panel">
+                                    <div class="attach-type-row">
+                                        <button class="attach-type active" data-type="photo">Photo</button>
+                                        <button class="attach-type" data-type="voice">Voice</button>
+                                        <button class="attach-type" data-type="document">Document</button>
+                                    </div>
+
+                                    <div class="upload-zone" id="broadcast-upload-zone">
+                                        <div>
+                                            <b>Вложение</b>
+                                            <p id="broadcast-file-name">Файл не выбран</p>
+                                        </div>
+                                        <button class="mini-btn" id="broadcast-pick-file">Выбрать файл</button>
+                                        <input type="file" id="broadcast-file" hidden>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="broadcast-side">
+                            <div class="broadcast-card preview-card">
+                                <h2>Предпросмотр</h2>
+
+                                <div class="phone-preview">
+                                    <div class="phone-top">Telegram preview</div>
+                                    <div class="phone-message">
+                                        <div id="broadcast-preview-text">Текст рассылки появится здесь</div>
+                                        <div id="broadcast-preview-file" class="preview-file hidden"></div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="broadcast-card result-card">
+                                <h2>Попадёт лидов</h2>
+                                <div class="broadcast-count" id="broadcast-count">—</div>
+                                <p id="broadcast-count-text">Сначала собери фильтр и нажми предпросмотр</p>
+
+                                <button class="wide-btn ghost" id="broadcast-preview-btn">Показать сколько лидов попадет</button>
+                                <button class="wide-btn primary" id="broadcast-start-btn">Запустить рассылку</button>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <div class="broadcast-modal hidden" id="broadcast-tag-modal">
+                    <div class="broadcast-modal-card">
+                        <div class="broadcast-modal-head">
+                            <div>
+                                <h2 id="broadcast-modal-title">Выбор тегов</h2>
+                                <p>Выбери теги из каталога</p>
+                            </div>
+                            <button id="broadcast-close-modal">×</button>
+                        </div>
+
+                        <div class="broadcast-tag-search">
+                            <input id="broadcast-tag-search" placeholder="Поиск тега...">
+                        </div>
+
+                        <div class="broadcast-tag-picker" id="broadcast-tag-picker"></div>
+                    </div>
+                </div>
+
+                <script src="/js/broadcasts.js"></script>
             </div>
         </section>
 
