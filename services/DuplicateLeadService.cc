@@ -176,5 +176,14 @@ bool DuplicateLeadService::markAsDuplicate(int leadId, int rootLeadId)
         "WHERE id=" + std::to_string(leadId)
     );
 
+    Database::exec(
+        "UPDATE leads SET "
+        "is_duplicate=0, "
+        "duplicate_of=0, "
+        "automation_enabled=1, "
+        "main_channel=channel "
+        "WHERE id=" + std::to_string(rootLeadId)
+    );
+
     return true;
 }

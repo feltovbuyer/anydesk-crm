@@ -12,6 +12,7 @@ struct TgBotConfig {
     std::string token;
     std::string channel;
     std::string geo;
+    std::string funnel;
 };
 struct TgSendFileResult {
     bool ok = false;

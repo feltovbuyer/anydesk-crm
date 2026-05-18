@@ -78,7 +78,7 @@ bool Database::init(const std::string& path)
     exec(R"SQL(
         CREATE TABLE IF NOT EXISTS leads (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            tg_user_id TEXT UNIQUE NOT NULL,
+            tg_user_id TEXT NOT NULL,
             username TEXT DEFAULT '',
             full_name TEXT DEFAULT '',
             channel TEXT DEFAULT '',
@@ -88,9 +88,92 @@ bool Database::init(const std::string& path)
             comment TEXT DEFAULT '',
             is_403 INTEGER NOT NULL DEFAULT 0,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-            last_message_at TEXT DEFAULT CURRENT_TIMESTAMP
+            last_message_at TEXT DEFAULT CURRENT_TIMESTAMP,
+
+            is_duplicate INTEGER NOT NULL DEFAULT 0,
+            duplicate_of INTEGER NOT NULL DEFAULT 0,
+            automation_enabled INTEGER NOT NULL DEFAULT 1,
+            main_channel TEXT DEFAULT '',
+
+            UNIQUE(tg_user_id, channel)
         );
     )SQL");
+    exec(R"SQL(
+    CREATE TABLE IF NOT EXISTS funnels (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        type TEXT NOT NULL DEFAULT 'fd',
+        active INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+)SQL");
+
+    exec(R"SQL(
+    CREATE TABLE IF NOT EXISTS funnel_steps (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        funnel_id INTEGER NOT NULL,
+        title TEXT NOT NULL,
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        tag_after TEXT DEFAULT '',
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+)SQL");
+
+    exec(R"SQL(
+    CREATE TABLE IF NOT EXISTS funnel_messages (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        step_id INTEGER NOT NULL,
+        message_type TEXT NOT NULL DEFAULT 'text',
+        text TEXT DEFAULT '',
+        file_path TEXT DEFAULT '',
+        tg_file_id TEXT DEFAULT '',
+        delay_seconds REAL NOT NULL DEFAULT 2.5,
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+)SQL");
+
+    exec(R"SQL(
+    CREATE TABLE IF NOT EXISTS lead_funnel_state (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        lead_id INTEGER NOT NULL,
+        funnel_id INTEGER NOT NULL,
+        current_step_id INTEGER DEFAULT 0,
+        waiting_answer INTEGER NOT NULL DEFAULT 0,
+        finished INTEGER NOT NULL DEFAULT 0,
+        started_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+)SQL");
+
+    exec(R"SQL(
+    CREATE TABLE IF NOT EXISTS lead_funnel_answers (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        lead_id INTEGER NOT NULL,
+        funnel_id INTEGER NOT NULL,
+        step_id INTEGER NOT NULL,
+        answer_text TEXT DEFAULT '',
+        answer_type TEXT DEFAULT 'text',
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+)SQL");
+
+    exec(R"SQL(
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_leads_tg_user_channel
+        ON leads(tg_user_id, channel);
+    )SQL");
+
+    exec(R"SQL(
+    CREATE TABLE IF NOT EXISTS tags_catalog (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL UNIQUE,
+        bg_color TEXT NOT NULL DEFAULT '#1e293b',
+        text_color TEXT NOT NULL DEFAULT '#ffffff',
+        system_tag INTEGER NOT NULL DEFAULT 0,
+        active INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+)SQL");
 
     auto leadCols = query("PRAGMA table_info(leads)");
     bool hasAssignedStaff = false;

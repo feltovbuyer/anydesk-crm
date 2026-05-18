@@ -35,7 +35,7 @@ void LeadService::upsertFromTelegram(
         << "'" << esc2(geo) << "',"
         << "CURRENT_TIMESTAMP"
         << ") "
-        << "ON CONFLICT(tg_user_id) DO UPDATE SET "
+        << "ON CONFLICT(tg_user_id, channel) DO UPDATE SET "
         << "username=excluded.username,"
         << "full_name=excluded.full_name,"
         << "channel=excluded.channel,"

@@ -26,6 +26,10 @@ add_executable(anydesk_web
     controllers/StaffController.cc
     services/AssignmentService.cc
     services/DuplicateLeadService.cc
+    controllers/FunnelController.cc
+    services/LeadTagService.cc
+    services/FunnelService.cc
+    controllers/TagController.cc
 
     db/Database.cc
 )

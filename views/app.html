@@ -80,9 +80,22 @@
         </section>
 
         <section id="funnels-page" class="page">
-            <div class="single-page">
-                <h1>Воронки</h1>
-                <p>Здесь позже будут воронки.</p>
+            <div class="funnels-layout">
+
+                <div class="funnels-left">
+                    <button class="new-funnel-btn" onclick="createFunnel()">
+                        + Новая воронка
+                    </button>
+
+                    <div id="funnels-list"></div>
+                </div>
+
+                <div class="funnels-right" id="funnels-editor">
+                    <div class="funnels-empty">
+                        Выбери или создай воронку
+                    </div>
+                </div>
+
             </div>
         </section>
 
@@ -103,6 +116,7 @@
                 </div>
 
                 <div class="admin-content">
+
                     <div id="bots-box" class="admin-box active">
                         <div class="admin-head">
                             <div>
@@ -110,7 +124,9 @@
                                 <p>Добавляй Telegram-ботов прямо из CRM.</p>
                             </div>
 
-                            <button class="primary-btn" id="open-bot-modal">+ Добавить бота</button>
+                            <button class="primary-btn" id="open-bot-modal">
+                                + Добавить бота
+                            </button>
                         </div>
 
                         <div id="bots-list" class="bots-list">
@@ -122,6 +138,7 @@
 
                     <div id="staff-box" class="admin-box">
                         <h1>Сотрудники</h1>
+
                         <div class="staff-head">
                             <div>
                                 <p>Менеджеры, теги, тип обработки и распределение лидов</p>
@@ -145,6 +162,7 @@
                                         <h3>Новый сотрудник</h3>
                                         <p>Добавь менеджера и процент выдачи лидов</p>
                                     </div>
+
                                     <button id="close-staff-modal" class="staff-close-btn">×</button>
                                 </div>
 
@@ -184,17 +202,19 @@
                                 </button>
                             </div>
                         </div>
-
-                        <div id="geo-box" class="admin-box">
-                            <h1>GEO</h1>
-                            <p>Позже добавим GEO и цвета тегов.</p>
-                        </div>
-
-                        <div id="tags-box" class="admin-box">
-                            <h1>Теги</h1>
-                            <p>Позже добавим кастомные теги.</p>
-                        </div>
                     </div>
+
+                    <div id="geo-box" class="admin-box">
+                        <h1>GEO</h1>
+                        <p>Позже добавим GEO.</p>
+                    </div>
+
+                    <div id="tags-box" class="admin-box">
+                        <h1>Теги</h1>
+                        <p>Загрузка...</p>
+                    </div>
+
+                </div>
             </div>
         </section>
 
@@ -294,5 +314,7 @@
     </div>
 
     <script src="/js/app.js"></script>
+    <script src="/js/funnels.js"></script>
+    <script src="/js/tags.js"></script>
 </body>
 </html>

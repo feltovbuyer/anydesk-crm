@@ -4,6 +4,7 @@
 #include "../services/TelegramService.h"
 #include "../db/Database.h"
 #include <filesystem>
+#include <sstream>
 #include "../services/TelegramFileService.h"
 
 #include <drogon/drogon.h>
@@ -126,6 +127,74 @@ void LeadController::registerRoutes()
 
             json["ok"] = true;
             callback(drogon::HttpResponse::newHttpJsonResponse(json));
+        },
+        { drogon::Post }
+    );
+
+    drogon::app().registerHandler(
+        "/api/leads/add-tag",
+        [](const drogon::HttpRequestPtr& req,
+            std::function<void(const drogon::HttpResponsePtr&)>&& callback)
+        {
+            auto json = req->getJsonObject();
+
+            if (!json) {
+                Json::Value out;
+                out["ok"] = false;
+                callback(drogon::HttpResponse::newHttpJsonResponse(out));
+                return;
+            }
+
+            int leadId = (*json)["lead_id"].asInt();
+            std::string tag = (*json)["tag"].asString();
+
+            if (leadId <= 0 || tag.empty()) {
+                Json::Value out;
+                out["ok"] = false;
+                callback(drogon::HttpResponse::newHttpJsonResponse(out));
+                return;
+            }
+
+            auto rows = Database::query(
+                "SELECT tags FROM leads WHERE id=" + std::to_string(leadId) + " LIMIT 1"
+            );
+
+            std::string tags = rows.empty() ? "" : rows[0]["tags"];
+
+            bool exists = false;
+
+            std::stringstream ss(tags);
+            std::string item;
+
+            while (std::getline(ss, item, ',')) {
+                while (!item.empty() && item.front() == ' ')
+                    item.erase(0, 1);
+
+                while (!item.empty() && item.back() == ' ')
+                    item.pop_back();
+
+                if (item == tag) {
+                    exists = true;
+                    break;
+                }
+            }
+
+            if (!exists) {
+                if (!tags.empty())
+                    tags += ", ";
+
+                tags += tag;
+
+                Database::exec(
+                    "UPDATE leads SET tags='" +
+                    Database::escape(tags) +
+                    "' WHERE id=" + std::to_string(leadId)
+                );
+            }
+
+            Json::Value out;
+            out["ok"] = true;
+            callback(drogon::HttpResponse::newHttpJsonResponse(out));
         },
         { drogon::Post }
     );

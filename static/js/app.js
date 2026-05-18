@@ -7,6 +7,7 @@ let currentLeadChannel = "";
 let lastOpenedLeadId = null;
 let currentMessages = [];
 let lastMessageId = 0;
+let tagColorMap = {};
 
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -19,6 +20,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     loadBots();
     loadLeads();
+    loadTagColors();
 
     setInterval(loadLeads, 2500);
     setInterval(() => {
@@ -45,6 +47,7 @@ function bindNavigation() {
             if (page) page.classList.add("active");
 
             if (btn.dataset.page === "admin-page") loadBots();
+            if (btn.dataset.page === "funnels-page") loadFunnels();
         });
     });
 }
@@ -76,6 +79,7 @@ function bindAdminTabs() {
 
             if (btn.dataset.admin === "bots-box") loadBots();
             if (btn.dataset.admin === "staff-box") loadStaff();
+            if (btn.dataset.admin === "tags-box") loadTagsAdmin();
         });
     });
 }
@@ -234,9 +238,14 @@ function leadHtml(lead) {
                 <div class="lead-msg">${safe(lead.last_message || "Нет сообщений")}</div>
 
                 <div class="lead-tags">
-                    ${lead.channel ? `<span class="mini-tag blue">${safe(lead.channel)}</span>` : ""}
-                    ${lead.geo ? `<span class="mini-tag green">${safe(lead.geo)}</span>` : ""}
-                    ${lead.tags ? `<span class="mini-tag yellow">${safe(lead.tags)}</span>` : ""}
+                    ${lead.channel ? tagChipHtml(lead.channel, "blue") : ""}
+                    ${lead.geo ? tagChipHtml(lead.geo, "green") : ""}
+                    ${(lead.tags || "")
+                        .split(",")
+                        .map(t => t.trim())
+                        .filter(Boolean)
+                        .map(t => tagChipHtml(t, "yellow"))
+                        .join("")}
                 </div>
             </div>
 
@@ -354,9 +363,16 @@ async function refreshMessagesAppend() {
 }
 
 function messageHtml(m) {
-    const fileUrl =
-        `/api/tg-file?channel=${encodeURIComponent(currentLeadChannel || "")}` +
-        `&file_id=${encodeURIComponent(m.media_id || "")}`;
+    const isFunnelLocalFile =
+    m.sender === "admin" &&
+    m.media_id &&
+    !m.media_id.startsWith("Ag") &&
+    !m.media_id.startsWith("BQ") &&
+    !m.media_id.startsWith("Aw");
+
+    const fileUrl = isFunnelLocalFile
+    ? `/api/funnels/file/${encodeURIComponent(m.media_id)}`
+    : `/api/tg-file?channel=${encodeURIComponent(currentLeadChannel || "")}&file_id=${encodeURIComponent(m.media_id || "")}`;
 
     let mediaHtml = "";
 
@@ -517,9 +533,22 @@ function renderLeadCard(lead) {
         <div class="info-row"><span>Создан</span><b>${safe(lead.created_at)}</b></div>
         <div class="info-row"><span>Канал</span><b>${safe(lead.channel || "-")}</b></div>
         <div class="info-row"><span>GEO</span><b>${safe(lead.geo || "-")}</b></div>
-        <div class="info-row"><span>SubID</span><b>${safe(lead.subid || "-")}</b></div>
         <div class="info-row"><span>Username</span><b>${safe(lead.username || "-")}</b></div>
         <textarea class="comment" placeholder="Комментарий по лиду...">${safe(lead.comment || "")}</textarea>
+        <div class="lead-tags-card">
+    <div class="lead-tags-title">Теги</div>
+    <div class="lead-tags-list">
+    ${lead.channel ? tagChipHtml(lead.channel, "blue") : ""}
+    ${lead.geo ? tagChipHtml(lead.geo, "green") : ""}
+    ${(lead.tags || "")
+        .split(",")
+        .map(t => t.trim())
+        .filter(Boolean)
+        .map(t => tagChipHtml(t, "yellow"))
+        .join("") || ""}
+</div>
+    <button class="add-lead-tag-btn" onclick="openAddLeadTagModal()">+ Добавить тег</button>
+</div>
     `;
 }
 async function loadFolderCounts() {
@@ -789,4 +818,137 @@ function editStaff(login, tag, workType, password, percent) {
     document.getElementById("staff-percent").value = percent;
 
     if (modal) modal.classList.remove("hidden");
+}
+async function loadTagColors() {
+    try {
+        const res = await fetch("/api/tags");
+        const tags = await res.json();
+
+        tagColorMap = {};
+
+        tags.forEach(t => {
+            tagColorMap[t.name] = {
+                bg: t.bg_color,
+                text: t.text_color
+            };
+        });
+    } catch (e) {
+        tagColorMap = {};
+    }
+}
+
+function allLeadTags(lead) {
+    const list = [];
+
+    if (lead.channel) list.push(lead.channel);
+    if (lead.geo) list.push(lead.geo);
+
+    (lead.tags || "")
+        .split(",")
+        .map(t => t.trim())
+        .filter(Boolean)
+        .forEach(t => list.push(t));
+
+    return [...new Set(list)];
+}
+
+function tagChipHtml(tag, fallbackClass = "yellow") {
+    const colors = tagColorMap[tag];
+
+    if (colors) {
+        return `
+            <span 
+                class="mini-tag"
+                style="background:${colors.bg}; color:${colors.text};"
+            >
+                ${safe(tag)}
+            </span>
+        `;
+    }
+
+    return `<span class="mini-tag ${fallbackClass}">${safe(tag)}</span>`;
+}
+async function openAddLeadTagModal() {
+    if (!currentLeadId) return;
+
+    const res = await fetch("/api/tags");
+    const tags = await res.json();
+
+    let modal = document.getElementById("lead-tag-modal");
+
+    if (!modal) {
+        modal = document.createElement("div");
+        modal.id = "lead-tag-modal";
+        modal.className = "lead-tag-modal hidden";
+        document.body.appendChild(modal);
+    }
+
+    modal.innerHTML = `
+        <div class="lead-tag-modal-backdrop" onclick="closeLeadTagModal()"></div>
+
+        <div class="lead-tag-modal-card">
+            <div class="lead-tag-modal-head">
+                <div>
+                    <h3>Добавить тег</h3>
+                    <p>Выбери тег из справочника</p>
+                </div>
+                <button onclick="closeLeadTagModal()">×</button>
+            </div>
+
+            <div class="lead-tag-picker">
+                ${
+                    tags.length
+                        ? tags.map(t => `
+                            <button 
+                                class="lead-tag-choice"
+                                style="background:${t.bg_color};color:${t.text_color};"
+                                onclick="addLeadTagFromPicker('${encodeURIComponent(t.name)}')"
+                            >
+                                ${safe(t.name)}
+                            </button>
+                        `).join("")
+                        : `<div class="lead-tags-empty">Сначала создай теги в Админка → Теги</div>`
+                }
+            </div>
+        </div>
+    `;
+
+    modal.classList.remove("hidden");
+}
+
+function closeLeadTagModal() {
+    const modal = document.getElementById("lead-tag-modal");
+    if (modal) modal.classList.add("hidden");
+}
+
+async function addLeadTagFromPicker(encodedTag) {
+    if (!currentLeadId) return;
+
+    const tag = decodeURIComponent(encodedTag);
+
+    await fetch("/api/leads/add-tag", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+            lead_id: Number(currentLeadId),
+            tag
+        })
+    });
+
+    closeLeadTagModal();
+
+    await loadLeads();
+
+    const fresh = await fetch(`/api/leads?folder=${encodeURIComponent(currentFolder)}`);
+    const json = await fresh.json();
+
+    if (json.ok && json.leads) {
+        const lead = json.leads.find(x => String(x.id) === String(currentLeadId));
+        if (lead) {
+            currentLeadData = lead;
+            renderLeadCard(lead);
+        }
+    }
 }

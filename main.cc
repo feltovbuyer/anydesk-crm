@@ -6,6 +6,8 @@
 #include "services/TelegramService.h"
 #include "controllers/StaffController.h"
 #include "controllers/LeadController.h"
+#include "controllers/FunnelController.h"
+#include "controllers/TagController.h"
 
 #include <thread>
 #include <chrono>
@@ -21,8 +23,10 @@ int main()
 
     PageController::registerRoutes();
     BotController::registerRoutes();
+    FunnelController::registerRoutes();
     StaffController::registerRoutes();
     LeadController::registerRoutes();
+    TagController::registerRoutes();
 
     std::thread tgStarter([]() {
         std::this_thread::sleep_for(std::chrono::seconds(1));

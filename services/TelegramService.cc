@@ -11,6 +11,7 @@
 #include <random>
 #include "AssignmentService.h"
 #include "DuplicateLeadService.h"
+#include "FunnelService.h"
 
 static size_t curlWrite(void* contents, size_t size, size_t nmemb, std::string* out)
 {
@@ -128,7 +129,7 @@ void TelegramService::startAll()
     curl_global_init(CURL_GLOBAL_DEFAULT);
 
     auto rows = Database::query(
-        "SELECT id, token, name AS channel, geo "
+        "SELECT id, token, name AS channel, geo, funnel "
         "FROM bots "
         "WHERE active = 1"
     );
@@ -141,6 +142,7 @@ void TelegramService::startAll()
         bot.token = r.at("token");
         bot.channel = r.at("channel");
         bot.geo = r.at("geo");
+        bot.funnel = r.at("funnel");
 
         workers.emplace_back([bot]() {
             pollingLoop(bot);
@@ -393,23 +395,32 @@ void TelegramService::saveIncomingMessage(
     std::string safeChannel = Database::escape(bot.channel);
     std::string safeGeo = Database::escape(bot.geo);
 
-    Database::exec(
-        "INSERT INTO leads (tg_user_id, username, full_name, channel, geo, subid, tags, assigned_staff, created_at, last_message_at) "
-        "VALUES ('" + std::to_string(tgUserId) + "', '" + safeUsername + "', '" + safeFullName + "', '" +
-        safeChannel + "', '" + safeGeo + "', '" + safeSubid + "', '" + safeFinalTags + "', '" + safeAssignedStaff + "', datetime('now'), datetime('now')) "
-        "ON CONFLICT(tg_user_id, channel) DO UPDATE SET "
-        "username=excluded.username, "
-        "full_name=excluded.full_name, "
-        "geo=excluded.geo, "
-        "subid=CASE WHEN excluded.subid != '' THEN excluded.subid ELSE leads.subid END, "
-        "assigned_staff=CASE WHEN leads.assigned_staff = '' THEN excluded.assigned_staff ELSE leads.assigned_staff END, "
-        "tags=CASE WHEN leads.tags = '' THEN excluded.tags ELSE leads.tags END, "
-        "last_message_at=datetime('now')"
-    );
+    if (isNewLead) {
+        Database::exec(
+            "INSERT INTO leads (tg_user_id, username, full_name, channel, geo, subid, tags, assigned_staff, created_at, last_message_at) "
+            "VALUES ('" + std::to_string(tgUserId) + "', '" + safeUsername + "', '" + safeFullName + "', '" +
+            safeChannel + "', '" + safeGeo + "', '" + safeSubid + "', '" + safeFinalTags + "', '" + safeAssignedStaff + "', datetime('now'), datetime('now'))"
+        );
+    }
+    else {
+        Database::exec(
+            "UPDATE leads SET "
+            "username='" + safeUsername + "', "
+            "full_name='" + safeFullName + "', "
+            "geo='" + safeGeo + "', "
+            "subid=CASE WHEN '" + safeSubid + "' != '' THEN '" + safeSubid + "' ELSE subid END, "
+            "assigned_staff=CASE WHEN assigned_staff = '' THEN '" + safeAssignedStaff + "' ELSE assigned_staff END, "
+            "tags=CASE WHEN tags = '' THEN '" + safeFinalTags + "' ELSE tags END, "
+            "last_message_at=datetime('now') "
+            "WHERE tg_user_id='" + std::to_string(tgUserId) + "' "
+            "AND channel='" + safeChannel + "'"
+        );
+    }
 
     auto rows = Database::query(
         "SELECT id FROM leads "
         "WHERE tg_user_id = '" + std::to_string(tgUserId) + "' "
+        "AND channel = '" + safeChannel + "' "
         "LIMIT 1"
     );
 
@@ -431,6 +442,23 @@ void TelegramService::saveIncomingMessage(
         "INSERT INTO messages (lead_id, sender, text, media_type, media_id, created_at, is_read) "
         "VALUES (" + leadId + ", 'user', '" + safeText + "', 'text', '', datetime('now'), 0)"
     );
+    if (rootId == leadIdInt) {
+        if (text.rfind("/start", 0) == 0) {
+            FunnelService::startFdForLead(
+                leadIdInt,
+                tgUserId,
+                bot
+            );
+        }
+        else {
+            FunnelService::handleLeadReply(
+                leadIdInt,
+                tgUserId,
+                bot,
+                text
+            );
+        }
+    }
 }
 void TelegramService::saveIncomingMedia(
     const TgBotConfig& bot,
@@ -445,6 +473,7 @@ void TelegramService::saveIncomingMedia(
     auto existingLead = Database::query(
         "SELECT id, assigned_staff, tags FROM leads "
         "WHERE tg_user_id = '" + std::to_string(tgUserId) + "' "
+        "AND channel = '" + Database::escape(bot.channel) + "' "
         "LIMIT 1"
     );
 
@@ -474,22 +503,31 @@ void TelegramService::saveIncomingMedia(
     std::string safeAssignedStaff = Database::escape(assignedStaff);
     std::string safeFinalTags = Database::escape(finalTags);
 
-    Database::exec(
-        "INSERT INTO leads (tg_user_id, username, full_name, channel, geo, tags, assigned_staff, created_at, last_message_at) "
-        "VALUES ('" + std::to_string(tgUserId) + "', '" + safeUsername + "', '" + safeFullName + "', '" +
-        safeChannel + "', '" + safeGeo + "', '" + safeFinalTags + "', '" + safeAssignedStaff + "', datetime('now'), datetime('now')) "
-        "ON CONFLICT(tg_user_id, channel) DO UPDATE SET "
-        "username=excluded.username, "
-        "full_name=excluded.full_name, "
-        "geo=excluded.geo, "
-        "assigned_staff=CASE WHEN leads.assigned_staff = '' THEN excluded.assigned_staff ELSE leads.assigned_staff END, "
-        "tags=CASE WHEN leads.tags = '' THEN excluded.tags ELSE leads.tags END, "
-        "last_message_at=datetime('now')"
-    );
+    if (isNewLead) {
+        Database::exec(
+            "INSERT INTO leads (tg_user_id, username, full_name, channel, geo, tags, assigned_staff, created_at, last_message_at) "
+            "VALUES ('" + std::to_string(tgUserId) + "', '" + safeUsername + "', '" + safeFullName + "', '" +
+            safeChannel + "', '" + safeGeo + "', '" + safeFinalTags + "', '" + safeAssignedStaff + "', datetime('now'), datetime('now'))"
+        );
+    }
+    else {
+        Database::exec(
+            "UPDATE leads SET "
+            "username='" + safeUsername + "', "
+            "full_name='" + safeFullName + "', "
+            "geo='" + safeGeo + "', "
+            "assigned_staff=CASE WHEN assigned_staff = '' THEN '" + safeAssignedStaff + "' ELSE assigned_staff END, "
+            "tags=CASE WHEN tags = '' THEN '" + safeFinalTags + "' ELSE tags END, "
+            "last_message_at=datetime('now') "
+            "WHERE tg_user_id='" + std::to_string(tgUserId) + "' "
+            "AND channel='" + safeChannel + "'"
+        );
+    }
 
     auto rows = Database::query(
         "SELECT id FROM leads "
         "WHERE tg_user_id = '" + std::to_string(tgUserId) + "' "
+        "AND channel = '" + safeChannel + "' "
         "LIMIT 1"
     );
 
@@ -512,6 +550,20 @@ void TelegramService::saveIncomingMedia(
         "VALUES (" + leadId + ", 'user', '" + safeText + "', '" +
         safeType + "', '" + safeMediaId + "', datetime('now'), 0)"
     );
+    if (rootId == leadIdInt) {
+        std::string funnelReply = text;
+
+        if (funnelReply.empty()) {
+            funnelReply = "[" + mediaType + "]";
+        }
+
+        FunnelService::handleLeadReply(
+            leadIdInt,
+            tgUserId,
+            bot,
+            funnelReply
+        );
+    }
 }
 
 bool TelegramService::sendText(
